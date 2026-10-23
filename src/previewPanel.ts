@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { findBibliographyFiles } from './parser/bibtex';
+import { IMAGE_EXTENSIONS, IMAGE_MIME, findGraphics } from './parser/graphics';
 import { renderDocument } from './parser/renderer';
 
 export class PreviewPanel {
@@ -20,6 +21,8 @@ export class PreviewPanel {
   private version = 0;
   /** 参照中の .bib（変更を監視する対象） */
   private readonly bibUris = new Set<string>();
+  /** 画像の data: URI（URI → 更新日時と中身） */
+  private readonly imageCache = new Map<string, { mtime: number; dataUri: string }>();
 
   private constructor(context: vscode.ExtensionContext, private readonly document: vscode.TextDocument, column: vscode.ViewColumn) {
     const mediaRoot = vscode.Uri.joinPath(context.extensionUri, 'dist', 'web');
@@ -38,11 +41,12 @@ export class PreviewPanel {
           this.scheduleUpdate();
         }
       }),
-      // エディタで開いていない .bib がディスク上で変わったとき
+      // エディタで開いていない .bib や画像がディスク上で変わったとき
       (() => {
-        const watcher = vscode.workspace.createFileSystemWatcher('**/*.bib');
+        const watcher = vscode.workspace.createFileSystemWatcher(`**/*.{bib,${IMAGE_EXTENSIONS.join(',')}}`);
         const onFs = (uri: vscode.Uri) => {
-          if (this.bibUris.has(uri.toString())) {
+          const key = uri.toString();
+          if (this.bibUris.has(key) || this.imageCache.has(key) || /\.(png|jpe?g|gif|svg|webp)$/i.test(uri.path)) {
             this.scheduleUpdate();
           }
         };
@@ -82,7 +86,7 @@ export class PreviewPanel {
     const version = ++this.version;
     const config = vscode.workspace.getConfiguration('latexPreview');
     const src = this.document.getText();
-    const bibFiles = await this.readBibFiles(src);
+    const [bibFiles, images] = await Promise.all([this.readBibFiles(src), this.readImages(src)]);
     if (version !== this.version) {
       return;
     }
@@ -91,11 +95,68 @@ export class PreviewPanel {
       result = renderDocument(src, {
         showUnknownCommands: config.get<boolean>('showUnknownCommands', true),
         bibFiles,
+        images,
       });
     } catch (e) {
       result = { html: `<pre class="error">${String(e)}</pre>`, macros: {} };
     }
     void this.panel.webview.postMessage({ type: 'update', ...result });
+  }
+
+  /**
+   * \includegraphics の画像を読み、data: URI にする（仮想ファイルシステムでも動くよう workspace.fs を使う）。
+   * 更新日時が同じならキャッシュを使う。EPS / PDF など表示できないものは含めない
+   */
+  private async readImages(src: string): Promise<Record<string, string>> {
+    const dir = vscode.Uri.joinPath(this.document.uri, '..');
+    const { paths, dirs } = findGraphics(src);
+    const out: Record<string, string> = {};
+    const used = new Set<string>();
+    await Promise.all(
+      paths.map(async (p) => {
+        const hasExt = /\.[a-zA-Z0-9]+$/.test(p);
+        const candidates: vscode.Uri[] = [];
+        for (const d of ['', ...dirs]) {
+          const base = vscode.Uri.joinPath(dir, d, p);
+          if (hasExt) {
+            candidates.push(base);
+          } else {
+            candidates.push(...IMAGE_EXTENSIONS.map((e) => base.with({ path: `${base.path}.${e}` })));
+          }
+        }
+        for (const uri of candidates) {
+          const ext = uri.path.split('.').pop()!.toLowerCase();
+          let stat: vscode.FileStat;
+          try {
+            stat = await vscode.workspace.fs.stat(uri);
+          } catch {
+            continue;
+          }
+          // 最初に見つかったファイルで決める（EPS / PDF ならプレースホルダ）
+          const mime = IMAGE_MIME[ext];
+          if (!mime || stat.size > MAX_IMAGE_BYTES) {
+            return;
+          }
+          const key = uri.toString();
+          used.add(key);
+          let cached = this.imageCache.get(key);
+          if (!cached || cached.mtime !== stat.mtime) {
+            const bytes = await vscode.workspace.fs.readFile(uri);
+            cached = { mtime: stat.mtime, dataUri: `data:${mime};base64,${toBase64(bytes)}` };
+            this.imageCache.set(key, cached);
+          }
+          out[p] = cached.dataUri;
+          return;
+        }
+      })
+    );
+    // 参照されなくなった画像はキャッシュから捨てる
+    for (const key of [...this.imageCache.keys()]) {
+      if (!used.has(key)) {
+        this.imageCache.delete(key);
+      }
+    }
+    return out;
   }
 
   /** \bibliography{...} の .bib を .tex と同じフォルダから読む。開いているものは未保存の内容を使う */
@@ -147,6 +208,18 @@ export class PreviewPanel {
     PreviewPanel.panels.delete(this.document.uri.toString());
     this.disposables.forEach((d) => d.dispose());
   }
+}
+
+/** これより大きい画像は読み込まない（更新のたびに Webview へ送るため） */
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+function toBase64(bytes: Uint8Array): string {
+  let bin = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
 }
 
 function makeNonce(): string {

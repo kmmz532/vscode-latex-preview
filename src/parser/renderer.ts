@@ -6,6 +6,8 @@ export interface RenderOptions {
   showUnknownCommands: boolean;
   /** \bibliography で指定された .bib の中身（ファイル名 → 内容）。読めなかったものは含まない */
   bibFiles?: Record<string, string>;
+  /** \includegraphics のパス（ソースに書かれたまま）→ data: URI。表示できないものは含まない */
+  images?: Record<string, string>;
 }
 
 /** 文献リストの状態（描画前に文書全体を走査して作る） */
@@ -267,6 +269,22 @@ function renderVerb(n: Extract<Node, { kind: 'verb' }>, ctx: Ctx): Out {
   return block(`<figure class="listing" data-line="${n.line}">${caption}<pre class="verbatim">${escapeHtml(visible(n.text))}</pre></figure>`);
 }
 
+/** width=0.5\linewidth / 5cm などを CSS の長さにする */
+function graphicsLength(s: string): string | undefined {
+  const rel = /^\s*(\d*\.?\d+)?\s*\\(linewidth|textwidth|columnwidth|hsize|textheight)\s*$/.exec(s);
+  if (rel) {
+    const ratio = parseFloat(rel[1] ?? '1');
+    return rel[2] === 'textheight' ? `calc(${ratio} * var(--textheight))` : `${ratio * 100}%`;
+  }
+  const m = /^\s*(\d*\.?\d+)\s*(mm|cm|in|pt|bp|em|ex|px)?\s*$/.exec(s);
+  if (!m) {
+    return undefined;
+  }
+  // 単位なしは bp（graphicx の既定）
+  const unit = m[2] === 'bp' || !m[2] ? 'pt' : m[2];
+  return `${m[1]}${unit}`;
+}
+
 /** "caption={a, b}, label=x" のような key=value 列（{} の中のカンマでは区切らない） */
 function parseKeyValues(s: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -472,9 +490,37 @@ const COMMANDS: Record<string, CommandHandler> = {
     const sep = ctx.japanese ? '　' : ': ';
     return block(`<div class="caption" data-line="${n.line}">${name}${ctx.japanese ? '' : ' '}${num}${sep}${renderInline(n.args[0], ctx)}</div>`);
   },
-  includegraphics: (n) => {
+  includegraphics: (n, ctx) => {
     const file = plain(n.args[0]).trim();
-    return block(`<div class="graphics" data-line="${n.line}">${file ? escapeHtml(file) : 'image'}</div>`);
+    const src = ctx.opts.images?.[file];
+    const opts = parseKeyValues(n.opt ?? '');
+    const style: string[] = [];
+    const width = opts.width !== undefined ? graphicsLength(opts.width) : undefined;
+    const height = opts.height !== undefined ? graphicsLength(opts.height) : undefined;
+    if (width) {
+      style.push(`width:${width}`);
+    }
+    if (height) {
+      style.push(`height:${height}`);
+    }
+    if (width && height && !('keepaspectratio' in opts)) {
+      style.push('object-fit:fill');
+    } else if (width && height) {
+      style.push('object-fit:contain');
+    }
+    const scale = parseFloat(opts.scale ?? '');
+    if (!width && !height && scale > 0) {
+      style.push(`zoom:${scale}`);
+    }
+    if (opts.angle) {
+      style.push(`rotate:${-parseFloat(opts.angle) || 0}deg`);
+    }
+    const css = style.length ? ` style="${style.join(';')}"` : '';
+    if (src) {
+      return inline(`<img class="graphics-img" src="${escapeHtml(src)}" alt="${escapeHtml(file)}"${css}>`);
+    }
+    // 見つからない・EPS / PDF などブラウザで表示できないものはファイル名の枠
+    return inline(`<span class="graphics"${width ? ` style="width:${width}"` : ''}>${file ? escapeHtml(file) : 'image'}</span>`);
   },
 
   LaTeX: symbol('L<sup>A</sup>T<sub>E</sub>X'),
