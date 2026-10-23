@@ -6,6 +6,8 @@ LaTeXを簡易プレビューするVSCode拡張機能<br />
 
 - https://marketplace.visualstudio.com/items?itemName=kmmz1127.simple-latex-preview
 
+![スクリーンショット](images/screenshot.png)
+
 ## 使い方
 1. `.tex` ファイルを開く
 2. エディタ右上のプレビューアイコン、またはコマンドパレットから `LaTeX Preview: Open Preview to the Side` を実行

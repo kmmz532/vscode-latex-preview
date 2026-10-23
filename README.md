@@ -6,6 +6,8 @@ Unlike other LaTeX extensions, it also works in VS Code for the Web (vscode.dev 
 
 - https://marketplace.visualstudio.com/items?itemName=kmmz1127.simple-latex-preview
 
+![Screenshot](images/screenshot.png)
+
 ## Usage
 1. Open a `.tex` file
 2. Click the preview icon at the top right of the editor, or run `LaTeX Preview: Open Preview to the Side` from the Command Palette
