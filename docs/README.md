@@ -56,6 +56,10 @@ Extension Host (Web Worker)                    Webview
 - **見た目は文書クラスに寄せる**：文字サイズ・行送り・字下げ・本文幅は `docclass.ts` が `jsarticle` / `article` 系の既定値（近似）と `\setlength` から決め、CSS 変数で渡す
 - 欧文フォントは KaTeX 同梱のフォント（Computer Modern 系）、和文は OS の明朝・ゴシックを使う
 
+### マクロ（`\newcommand` など）
+- 本文中のマクロは `parser.ts` がトークンの段階で展開し、展開結果をその場に差し込む（再帰は 10000 回で打ち切り）
+- 数式は TeX ソースのまま Webview に送るので、定義を `macros` として一緒に送り、KaTeX の `macros` オプションで展開させる
+
 ### コマンドや環境を追加するには
 `src/parser/renderer.ts` の `COMMANDS`（コマンド）または `ENVS`（環境）にハンドラを追加する。
 必須引数の数が決まっているコマンドは `src/parser/parser.ts` の `ARITY` / `ENV_ARITY` にも登録する（未登録だと後続の `{...}` をすべて引数として取る）。

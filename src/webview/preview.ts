@@ -18,7 +18,7 @@ let state: ViewState = vscode.getState() ?? { mode: 'fit', zoom: 1 };
 
 const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 
-function renderMath(root: HTMLElement) {
+function renderMath(root: HTMLElement, macros: Record<string, string>) {
   root.querySelectorAll<HTMLElement>('.math').forEach((el) => {
     const tex = el.textContent ?? '';
     try {
@@ -26,6 +26,8 @@ function renderMath(root: HTMLElement) {
         displayMode: el.dataset.display === '1',
         throwOnError: false,
         strict: 'ignore',
+        // \gdef 等で書き換えられても次の数式に影響しないよう毎回コピーする
+        macros: { ...macros },
       });
     } catch (e) {
       el.classList.add('math-error');
@@ -164,7 +166,7 @@ window.addEventListener('message', (event) => {
   const msg = event.data;
   if (msg?.type === 'update') {
     content.innerHTML = msg.html;
-    renderMath(content);
+    renderMath(content, msg.macros ?? {});
     // ページ分割は等倍で測る
     const zoom = content.style.zoom;
     content.style.zoom = '1';

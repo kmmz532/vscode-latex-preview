@@ -12,21 +12,61 @@ export type Node =
 const ARITY: Record<string, number> = {
   item: 0, maketitle: 0, today: 0, LaTeX: 0, TeX: 0, centering: 0, noindent: 0,
   newpage: 0, clearpage: 0, onecolumn: 0, twocolumn: 0, tableofcontents: 0, hline: 0, par: 0, '\\': 0,
-  href: 2, setlength: 2, setcounter: 2, addtolength: 2,
+  multicolumn: 3, href: 2, setlength: 2, setcounter: 2, addtolength: 2,
 };
 
 /** 環境ごとの必須引数の数 */
 const ENV_ARITY: Record<string, number> = {
-  tabular: 1, 'tabular*': 2, minipage: 1, thebibliography: 1,
+  tabular: 1, 'tabular*': 2, tabularx: 2, minipage: 1, thebibliography: 1,
 };
 
+/** \newcommand 等で定義されたマクロ */
+interface Macro {
+  nargs: number;
+  /** 第 1 引数がオプション引数のときの既定値 */
+  defaultOpt?: Token[];
+  body: Token[];
+}
+
+/** マクロ定義を行うコマンド */
+const DEFINERS = new Set([
+  'newcommand', 'newcommand*', 'renewcommand', 'renewcommand*', 'providecommand', 'providecommand*',
+  'DeclareRobustCommand', 'DeclareRobustCommand*',
+]);
+const DEFS = new Set(['def', 'gdef', 'edef', 'xdef']);
+
+/** 再帰的なマクロで止まらなくなるのを防ぐ上限 */
+const MAX_EXPANSIONS = 10000;
+
+export interface ParseResult {
+  nodes: Node[];
+  /** KaTeX に渡すマクロ（\name → 本体の TeX ソース） */
+  macros: Record<string, string>;
+}
+
 export function parse(src: string): Node[] {
-  return new Parser(tokenize(src)).parseUntil(() => false);
+  return parseDocument(src).nodes;
+}
+
+export function parseDocument(src: string): ParseResult {
+  const parser = new Parser(tokenize(src));
+  const nodes = parser.parseUntil(() => false);
+  return { nodes, macros: parser.katexMacros() };
 }
 
 class Parser {
   private pos = 0;
+  private readonly macros = new Map<string, Macro>();
+  private expansions = 0;
   constructor(private tokens: Token[]) {}
+
+  katexMacros(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [name, m] of this.macros) {
+      out['\\' + name] = tokensToSource(m.body);
+    }
+    return out;
+  }
 
   private peek(): Token | undefined {
     return this.tokens[this.pos];
@@ -62,6 +102,18 @@ class Parser {
         // 対応しない } は文字として残す（壊れない）
         return { kind: 'text', value: '}', line: t.line };
       case 'command':
+        if (DEFINERS.has(t.name)) {
+          this.defineNewcommand(t.name.startsWith('provide'));
+          return undefined;
+        }
+        if (DEFS.has(t.name)) {
+          this.defineDef();
+          return undefined;
+        }
+        if (this.macros.has(t.name) && this.expansions < MAX_EXPANSIONS) {
+          this.expand(this.macros.get(t.name)!, t.line);
+          return undefined;
+        }
         if (t.name === 'begin') {
           return this.parseEnv(t.line);
         }
@@ -178,10 +230,149 @@ class Parser {
     return { kind: 'env', name, opt, args, children, line };
   }
 
+  // ---- マクロ ----
+
+  /** \newcommand{\name}[n][default]{body} / \newcommand\name... */
+  private defineNewcommand(keepExisting: boolean) {
+    const name = this.readMacroName();
+    if (!name) {
+      return;
+    }
+    const n = parseInt(this.readOpt() ?? '0', 10) || 0;
+    const def = n > 0 ? this.readOpt() : undefined;
+    const body = this.readRawArg();
+    if (keepExisting && this.macros.has(name)) {
+      return;
+    }
+    this.macros.set(name, { nargs: n, defaultOpt: def !== undefined ? tokenize(def) : undefined, body });
+  }
+
+  /** \def\name#1#2{body}（区切り付きパラメータは非対応） */
+  private defineDef() {
+    this.skipWhitespace();
+    const t = this.peek();
+    if (t?.type !== 'command') {
+      return;
+    }
+    this.pos++;
+    let nargs = 0;
+    const params = this.peek();
+    if (params?.type === 'text' && /^(\s*#\d)+\s*$/.test(params.value)) {
+      nargs = (params.value.match(/#\d/g) ?? []).length;
+      this.pos++;
+    }
+    this.macros.set(t.name, { nargs, body: this.readRawArg() });
+  }
+
+  private readMacroName(): string | undefined {
+    this.skipWhitespace();
+    const t = this.peek();
+    if (t?.type === 'command') {
+      this.pos++;
+      return t.name;
+    }
+    if (t?.type === 'lbrace') {
+      const inner = this.readRawArg();
+      const cmd = inner.find((x) => x.type === 'command');
+      return cmd?.type === 'command' ? cmd.name : undefined;
+    }
+    return undefined;
+  }
+
+  /** 引数をトークン列のまま読む（{...} の中身、またはトークン 1 個） */
+  private readRawArg(): Token[] {
+    this.skipWhitespace();
+    const t = this.peek();
+    if (!t) {
+      return [];
+    }
+    if (t.type !== 'lbrace') {
+      this.pos++;
+      // 波括弧なしのテキスト引数は先頭 1 文字だけ（\foo ab → #1 = a）
+      if (t.type === 'text' && t.value.length > 1) {
+        this.tokens.splice(this.pos, 0, { ...t, value: t.value.slice(1) });
+        return [{ ...t, value: t.value[0] }];
+      }
+      return [t];
+    }
+    let depth = 0;
+    const start = ++this.pos;
+    while (this.pos < this.tokens.length) {
+      const x = this.tokens[this.pos];
+      if (x.type === 'lbrace') {
+        depth++;
+      } else if (x.type === 'rbrace') {
+        if (depth === 0) {
+          return this.tokens.slice(start, this.pos++);
+        }
+        depth--;
+      }
+      this.pos++;
+    }
+    return this.tokens.slice(start);
+  }
+
+  private skipWhitespace() {
+    while (this.peek()?.type === 'text' && /^\s*$/.test((this.peek() as { value: string }).value)) {
+      this.pos++;
+    }
+  }
+
+  /** マクロを展開し、結果のトークンを現在位置に差し込む */
+  private expand(m: Macro, line: number) {
+    this.expansions++;
+    const args: Token[][] = [];
+    if (m.defaultOpt) {
+      const opt = this.readOpt();
+      args.push(opt !== undefined ? tokenize(opt) : m.defaultOpt);
+    }
+    while (args.length < m.nargs) {
+      args.push(this.readRawArg());
+    }
+    const out: Token[] = [];
+    for (const t of m.body) {
+      if (t.type !== 'text' || !/#\d/.test(t.value)) {
+        out.push({ ...t, line });
+        continue;
+      }
+      for (const part of t.value.split(/(#\d)/)) {
+        const ref = /^#(\d)$/.exec(part);
+        if (ref) {
+          out.push(...(args[parseInt(ref[1], 10) - 1] ?? []).map((a) => ({ ...a, line })));
+        } else if (part) {
+          out.push({ ...t, value: part, line });
+        }
+      }
+    }
+    this.tokens.splice(this.pos, 0, ...out);
+  }
+
   /** 現在位置の \end{...} の環境名 */
   private endName(): string {
     const lb = this.tokens[this.pos + 1];
     const tx = this.tokens[this.pos + 2];
     return lb?.type === 'lbrace' && tx?.type === 'text' ? tx.value.trim() : '';
   }
+}
+
+/** トークン列を TeX ソースに戻す（KaTeX のマクロ定義用） */
+function tokensToSource(tokens: Token[]): string {
+  return tokens
+    .map((t) => {
+      switch (t.type) {
+        case 'command':
+          return '\\' + t.name + (/[a-zA-Z]$/.test(t.name) ? ' ' : '');
+        case 'lbrace':
+          return '{';
+        case 'rbrace':
+          return '}';
+        case 'text':
+          return t.value;
+        case 'parbreak':
+          return '\n\n';
+        case 'math':
+          return t.env ? `\\begin{${t.env}}${t.tex}\\end{${t.env}}` : t.display ? `\\[${t.tex}\\]` : `$${t.tex}$`;
+      }
+    })
+    .join('');
 }

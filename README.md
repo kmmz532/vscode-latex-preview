@@ -18,6 +18,8 @@ LaTeXを簡易プレビューするVSCode拡張機能<br />
 - 文字装飾: `\textbf` `\textit` `\emph` `\texttt` `\underline` など
 - リスト: `itemize` `enumerate` `description`
 - `figure` / `table` と `\caption`（画像はファイル名の枠で表示）
+- 表: `tabular` `tabular*` `tabularx`（`l` `c` `r` `p{幅}`、縦線 `|`、`\hline`、`\multicolumn`）
+- マクロ: `\newcommand` `\renewcommand` `\providecommand` `\def`（引数・オプション引数の既定値に対応。数式中でも使える）
 - `\cite` `\ref` の簡易表示
 - 文書クラス（`jsarticle` / `article` 系）に合わせた文字サイズ・行送り・字下げ
 - `twocolumn` による 2 段組と、`\textheight` に基づくページ分割
@@ -33,7 +35,8 @@ LaTeXを簡易プレビューするVSCode拡張機能<br />
 
 ## 制限
 - 段落はページをまたいで分割しない
-- 画像の読み込み、`tabular`、`\newcommand`、`\input` などは未対応
+- 画像の読み込み、`\input` / `\include`、`\cline`、`\multirow` などは未対応
+- `\def` の区切り付きパラメータ（`\def\foo#1.{...}` など）は未対応
 - 寸法のデフォルトは各文書クラスの近似値
 
 ## バグ報告、要望

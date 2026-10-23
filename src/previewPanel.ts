@@ -61,15 +61,15 @@ export class PreviewPanel {
 
   private update() {
     const config = vscode.workspace.getConfiguration('latexPreview');
-    let html: string;
+    let result: { html: string; macros: Record<string, string> };
     try {
-      html = renderDocument(this.document.getText(), {
+      result = renderDocument(this.document.getText(), {
         showUnknownCommands: config.get<boolean>('showUnknownCommands', true),
       });
     } catch (e) {
-      html = `<pre class="error">${String(e)}</pre>`;
+      result = { html: `<pre class="error">${String(e)}</pre>`, macros: {} };
     }
-    void this.panel.webview.postMessage({ type: 'update', html });
+    void this.panel.webview.postMessage({ type: 'update', ...result });
   }
 
   private shellHtml(mediaRoot: vscode.Uri): string {

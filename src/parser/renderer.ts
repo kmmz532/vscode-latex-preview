@@ -1,5 +1,5 @@
 import { computeLayout } from './docclass';
-import { Node, parse } from './parser';
+import { Node, parse, parseDocument } from './parser';
 
 export interface RenderOptions {
   showUnknownCommands: boolean;
@@ -34,12 +34,19 @@ const inline = (html: string): Out => ({ html, block: false });
 const block = (html: string): Out => ({ html, block: true });
 const NOTHING = inline('');
 
-export function renderDocument(src: string, opts: RenderOptions): string {
+export interface RenderResult {
+  html: string;
+  /** 文書中の \newcommand 等。数式の描画時に KaTeX へ渡す */
+  macros: Record<string, string>;
+}
+
+export function renderDocument(src: string, opts: RenderOptions): RenderResult {
   let nodes: Node[];
+  let macros: Record<string, string>;
   try {
-    nodes = parse(src);
+    ({ nodes, macros } = parseDocument(src));
   } catch (e) {
-    return `<pre class="error">Parse error: ${escapeHtml(String(e))}</pre>`;
+    return { html: `<pre class="error">Parse error: ${escapeHtml(String(e))}</pre>`, macros: {} };
   }
   const layout = computeLayout(nodes, plain);
   const ctx: Ctx = { opts, meta: {}, japanese: layout.japanese, counters: { figure: 0, table: 0, section: [0, 0, 0] } };
@@ -52,7 +59,8 @@ export function renderDocument(src: string, opts: RenderOptions): string {
     `--textwidth:${layout.textwidth};--textheight:${layout.textheight};--colsep:${layout.columnsep}`;
   // \documentclass がある完全な文書だけページ分割する（断片はそのまま流す）
   const paged = nodes.some((n) => n.kind === 'command' && n.name === 'documentclass') ? ' paged' : '';
-  return `<div class="doc ${layout.japanese ? 'ja' : 'en'}${paged}" style="${style}">${renderColumns(body, layout.twoColumn, ctx)}</div>`;
+  const html = `<div class="doc ${layout.japanese ? 'ja' : 'en'}${paged}" style="${style}">${renderColumns(body, layout.twoColumn, ctx)}</div>`;
+  return { html, macros };
 }
 
 /** \onecolumn / \twocolumn で区切って段組みごとにまとめる */
@@ -388,7 +396,191 @@ const float = (kind: 'figure' | 'table'): EnvHandler => (n, ctx) => {
   return block(`<figure class="float ${kind}${span}" data-line="${n.line}">${body}</figure>`);
 };
 
+// ---- tabular ----
+
+interface Column {
+  align: 'left' | 'center' | 'right';
+  width?: string;
+  /** 列の左側の縦線の本数 */
+  borderLeft: number;
+  borderRight: number;
+}
+
+/** 列指定（|l|c|r|, p{3cm}, *{3}{c}, @{} など）を解釈する */
+function parseColSpec(spec: string): Column[] {
+  // *{n}{...} を展開
+  for (let k = 0; k < 10 && spec.includes('*{'); k++) {
+    spec = spec.replace(/\*\{(\d+)\}\{([^{}]*)\}/g, (_, n, s) => s.repeat(parseInt(n, 10)));
+  }
+  const cols: Column[] = [];
+  let pending = 0;
+  for (let i = 0; i < spec.length; i++) {
+    const c = spec[i];
+    const readBraced = () => {
+      if (spec[i + 1] !== '{') {
+        return '';
+      }
+      let depth = 0;
+      const start = i + 2;
+      for (let j = i + 1; j < spec.length; j++) {
+        if (spec[j] === '{') {
+          depth++;
+        } else if (spec[j] === '}' && --depth === 0) {
+          i = j;
+          return spec.slice(start, j);
+        }
+      }
+      i = spec.length;
+      return spec.slice(start);
+    };
+    if (c === '|') {
+      // 列の後ろの | はその列の右線、先頭の | は最初の列の左線
+      if (cols.length) {
+        cols[cols.length - 1].borderRight++;
+      } else {
+        pending++;
+      }
+    } else if (c === 'l' || c === 'c' || c === 'r') {
+      cols.push({ align: c === 'l' ? 'left' : c === 'c' ? 'center' : 'right', borderLeft: pending, borderRight: 0 });
+      pending = 0;
+    } else if (c === 'p' || c === 'm' || c === 'b' || c === 'X') {
+      const w = c === 'X' ? undefined : readBraced();
+      cols.push({ align: 'left', width: w ? toWidth(w) : undefined, borderLeft: pending, borderRight: 0 });
+      pending = 0;
+    } else if (c === '@' || c === '!' || c === '>' || c === '<') {
+      readBraced();
+    }
+  }
+  return cols;
+}
+
+function toWidth(w: string): string | undefined {
+  const m = /^\s*(\d*\.?\d+)\s*(mm|cm|in|pt|em|ex)\s*$/.exec(w);
+  if (m) {
+    return `${m[1]}${m[2]}`;
+  }
+  const rel = /^\s*(\d*\.?\d+)?\s*\\(linewidth|textwidth|columnwidth|hsize)\s*$/.exec(w);
+  return rel ? `${parseFloat(rel[1] ?? '1') * 100}%` : undefined;
+}
+
+interface Row {
+  cells: Node[][];
+  /** この行の上に引く横線の本数 */
+  hlines: number;
+}
+
+/** 子ノードを \\ で行に、& でセルに分ける */
+function splitRows(children: Node[]): Row[] {
+  const rows: Row[] = [];
+  let row: Row = { cells: [[]], hlines: 0 };
+  const cell = () => row.cells[row.cells.length - 1];
+  for (const n of children) {
+    if (n.kind === 'command' && (n.name === '\\' || n.name === 'tabularnewline')) {
+      rows.push(row);
+      row = { cells: [[]], hlines: 0 };
+    } else if (n.kind === 'command' && (n.name === 'hline' || n.name === 'toprule' || n.name === 'midrule' || n.name === 'bottomrule')) {
+      row.hlines++;
+    } else if (n.kind === 'command' && n.name === 'cline') {
+      // 部分的な横線は省略
+    } else if (n.kind === 'text' && n.value.includes('&')) {
+      const parts = n.value.split('&');
+      parts.forEach((p, k) => {
+        if (k > 0) {
+          row.cells.push([]);
+        }
+        if (p) {
+          cell().push({ ...n, value: p });
+        }
+      });
+    } else {
+      cell().push(n);
+    }
+  }
+  rows.push(row);
+  return rows;
+}
+
+const isBlank = (nodes: Node[]) => nodes.every((n) => n.kind === 'text' && !n.value.trim());
+
+const tabular: EnvHandler = (n, ctx) => {
+  // tabular*{幅}{列指定} / tabularx{幅}{列指定}
+  const spec = n.args[n.name === 'tabular' ? 0 : 1];
+  const cols = parseColSpec(nodesToSource(spec));
+  const rows = splitRows(n.children);
+  // 最後の \\ の後ろは横線だけの行になるので、表の下線として扱う
+  const last = rows[rows.length - 1];
+  let bottom = 0;
+  if (last && last.cells.length === 1 && isBlank(last.cells[0])) {
+    bottom = last.hlines;
+    rows.pop();
+  }
+  const border = (count: number) => (count >= 2 ? '3px double' : count === 1 ? '1px solid' : '');
+  const trs = rows.map((r, ri) => {
+    const nextHlines = ri + 1 < rows.length ? rows[ri + 1].hlines : bottom;
+    let col = 0;
+    const tds = r.cells.map((c) => {
+      let span = 1;
+      let col0 = cols[col];
+      let content = c;
+      let lastCol: Column | undefined;
+      // \multicolumn{n}{spec}{content}：揃えと縦線は spec に従う
+      const mc = c.filter((x) => !(x.kind === 'text' && !x.value.trim()));
+      if (mc.length === 1 && mc[0].kind === 'command' && mc[0].name === 'multicolumn') {
+        span = parseInt(plain(mc[0].args[0]), 10) || 1;
+        col0 = lastCol = parseColSpec(nodesToSource(mc[0].args[1]))[0] ?? col0;
+        content = mc[0].args[2] ?? [];
+      } else {
+        lastCol = cols[col + span - 1];
+      }
+      col += span;
+      const style: string[] = [`text-align:${col0?.align ?? 'left'}`];
+      if (col0?.width) {
+        style.push(`width:${col0.width}`);
+      }
+      if (col0?.borderLeft) {
+        style.push(`border-left:${border(col0.borderLeft)}`);
+      }
+      if (lastCol?.borderRight) {
+        style.push(`border-right:${border(lastCol.borderRight)}`);
+      }
+      if (r.hlines) {
+        style.push(`border-top:${border(r.hlines)}`);
+      }
+      if (nextHlines) {
+        style.push(`border-bottom:${border(nextHlines)}`);
+      }
+      return `<td${span > 1 ? ` colspan="${span}"` : ''} style="${style.join(';')}">${renderInline(content, ctx).trim()}</td>`;
+    });
+    return `<tr>${tds.join('')}</tr>`;
+  });
+  return block(`<table class="tabular" data-line="${n.line}">${trs.join('')}</table>`);
+};
+
+/** ノードを TeX ソースに近い文字列に戻す（列指定の解釈用） */
+function nodesToSource(nodes: Node[] | undefined): string {
+  if (!nodes) {
+    return '';
+  }
+  return nodes
+    .map((n) => {
+      switch (n.kind) {
+        case 'text':
+          return n.value;
+        case 'group':
+          return `{${nodesToSource(n.children)}}`;
+        case 'command':
+          return '\\' + n.name + n.args.map((a) => `{${nodesToSource(a)}}`).join('');
+        default:
+          return '';
+      }
+    })
+    .join('');
+}
+
 const ENVS: Record<string, EnvHandler> = {
+  tabular,
+  'tabular*': tabular,
+  tabularx: tabular,
   figure: float('figure'),
   'figure*': float('figure'),
   table: float('table'),
