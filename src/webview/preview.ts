@@ -145,63 +145,221 @@ new ResizeObserver(() => {
 
 // ---- ページ分割 ----
 
+/** ページに流し込むブロック */
+interface Block {
+  el: Element;
+  two: boolean;
+  /** 段組みの切替の先頭（改ページする） */
+  segStart: boolean;
+  /** 変わったかの判定用（data-line を除いた描画前の HTML） */
+  key: string;
+  /** 分割後の断片（el と、ページをまたいだ段落の続き） */
+  pieces: Element[];
+}
+
+interface PageInfo {
+  el: HTMLElement;
+  /** 最初に入っているブロックの番号 */
+  start: number;
+  /** 最初のブロックが前のページからの続き */
+  split: boolean;
+  /** 最後に入っているブロックの番号 */
+  end: number;
+}
+
+/**
+ * 前回のページ分割の結果（.doc.paged の出現順）。
+ * 数千行の文書では分割のたびのレイアウト計算が重いので、変わっていない部分のページは使い回す
+ */
+let layouts: { docKey: string; blocks: Block[]; pages: PageInfo[] }[] = [];
+
+/** .doc.paged の中身をブロックに分ける。数式を描画する前に呼ぶ（key に KaTeX の出力を含めない） */
+function collectBlocks(doc: HTMLElement): Block[] {
+  const blocks: Block[] = [];
+  let prevTwo: boolean | undefined;
+  for (const child of Array.from(doc.children)) {
+    const two = child.classList.contains('twocolumn');
+    const els = two ? Array.from(child.children) : [child];
+    els.forEach((el, k) => {
+      // 2 段組の塊は 1 つずつが別の区切り。1 段組は続くかぎりまとめる
+      const segStart = k === 0 && (two || prevTwo !== false);
+      blocks.push({ el, two, segStart, key: `${two ? 2 : 1}${segStart ? 's' : ''}${el.outerHTML.replace(/ data-line="\d*"/g, '')}`, pieces: [el] });
+    });
+    prevTwo = two;
+  }
+  return blocks;
+}
+
 /**
  * .doc.paged の中身を \textheight ごとのページに分ける。
  * ブロックを 1 つずつ入れ、あふれたら（2 段組なら 3 段目にはみ出したら）次のページへ送る。
- * 段落（<p>）はあふれた行の頭で分け、残りを次のページへ送る（段の間はブラウザが分割する）
+ * 段落（<p>）はあふれた行の頭で分け、残りを次のページへ送る（段の間はブラウザが分割する）。
+ * 前回の結果（layouts[slot]）と比べ、先頭から変わっていないページと、
+ * 変更箇所の後でページの始まりが前回と揃ったところから先は、前回のページをそのまま使う
  */
-function paginate(doc: HTMLElement) {
-  const segments: { two: boolean; blocks: Element[] }[] = [];
-  for (const el of Array.from(doc.children)) {
-    const two = el.classList.contains('twocolumn');
-    const blocks = two ? Array.from(el.children) : [el];
-    const last = segments[segments.length - 1];
-    if (!two && last && !last.two) {
-      last.blocks.push(...blocks);
-    } else {
-      segments.push({ two, blocks });
-    }
+function paginate(doc: HTMLElement, blocks: Block[], docKey: string, slot: number) {
+  const prev = layouts[slot]?.docKey === docKey ? layouts[slot] : undefined;
+  const old = prev?.blocks ?? [];
+  const n = blocks.length;
+  const m = old.length;
+  let same = 0;
+  while (same < n && same < m && blocks[same].key === old[same].key) {
+    same++;
   }
-  doc.replaceChildren();
+  let sameTail = 0;
+  while (sameTail < Math.min(n, m) - same && blocks[n - 1 - sameTail].key === old[m - 1 - sameTail].key) {
+    sameTail++;
+  }
 
-  // \onecolumn / \twocolumn の切替は LaTeX と同じく改ページ
-  for (const seg of segments) {
-    let body = newPage(doc, seg.two);
-    for (const first of seg.blocks) {
-      let block: Element | undefined = first;
-      while (block) {
-        body.appendChild(block);
-        if (!overflows(body, seg.two)) {
-          break;
-        }
-        const rest = splitParagraph(block, body, seg.two);
-        if (rest) {
-          body = newPage(doc, seg.two);
-          block = rest;
-          continue;
-        }
-        if (body.children.length > 1) {
-          block.remove();
-          body = newPage(doc, seg.two);
-          body.appendChild(block);
-        }
+  // 最初に変わったブロックは、その前のブロックの最後の断片があるページに入る。そこより前のページは使い回す
+  const oldPages = prev?.pages ?? [];
+  const oldPageIndex = new Map(oldPages.map((p, k) => [p.el as Element, k]));
+  /** 前回のブロックの断片のうち、q ページ目以降にあるもの */
+  const piecesFrom = (b: Block, q: number) => b.pieces.filter((x) => (oldPageIndex.get(x.closest('.page')!) ?? -1) >= q);
+  let r = same === 0 ? 0 : oldPages.findIndex((p) => p.end >= same - 1);
+  if (r < 0) {
+    r = oldPages.length;
+  }
+  const pages = oldPages.slice(0, r);
+  const start = r < oldPages.length ? oldPages[r].start : pages.length > 0 ? pages[pages.length - 1].end + 1 : 0;
+  for (let i = 0; i < start; i++) {
+    reuseBlock(blocks[i], old[i]);
+  }
+  // r ページ目が段落の続きから始まるなら、その段落の残りの断片を 1 つにまとめて、そこから組み直す
+  let tail: HTMLElement | undefined;
+  if (r < oldPages.length && oldPages[r].split) {
+    const rest = piecesFrom(old[start], r);
+    reuseBlock(blocks[start], old[start]);
+    tail = document.createElement('p');
+    tail.className = 'split-tail';
+    for (const x of rest) {
+      tail.append(...Array.from(x.childNodes));
+    }
+    blocks[start].pieces = blocks[start].pieces.filter((x) => !rest.includes(x));
+  }
+  doc.replaceChildren(...pages.map((p) => p.el));
+
+  const newPage = (i: number, split: boolean): HTMLElement => {
+    const page = document.createElement('div');
+    page.className = 'page';
+    doc.appendChild(page);
+    pages.push({ el: page, start: i, split, end: i });
+    if (!blocks[i].two) {
+      return page;
+    }
+    const cols = document.createElement('div');
+    cols.className = 'twocolumn';
+    page.appendChild(cols);
+    return cols;
+  };
+  const shift = n - m;
+  /** 前回の q ページ目以降をつなぎ、ブロック from 以降を前回のものに差し替える */
+  const adopt = (q: number, from: number) => {
+    for (let j = from; j < n; j++) {
+      reuseBlock(blocks[j], old[j - shift]);
+    }
+    for (const p of oldPages.slice(q)) {
+      doc.appendChild(p.el);
+      pages.push({ ...p, start: p.start + shift, end: p.end + shift });
+    }
+  };
+  // 変更箇所より後で新しいページを始めるところで、前回も同じところからページが始まっていれば、以降は前回のまま
+  const resync = (i: number): boolean => {
+    const q = i < n - sameTail ? -1 : oldPages.findIndex((p) => p.start === i - shift && !p.split);
+    if (q < 0) {
+      return false;
+    }
+    adopt(q, i);
+    return true;
+  };
+  // 段落の続き rest から始めるとき。前回も同じ文字から始まるページがあればそこにつなぐ
+  const resyncTail = (i: number, b: Block, rest: Element): boolean => {
+    if (i < n - sameTail) {
+      return false;
+    }
+    const html = rest.innerHTML;
+    const q = oldPages.findIndex(
+      (p, k) =>
+        p.start === i - shift &&
+        p.split &&
+        piecesFrom(old[i - shift], k)
+          .map((x) => x.innerHTML)
+          .join('') === html
+    );
+    if (q < 0) {
+      return false;
+    }
+    const prevTail = piecesFrom(old[i - shift], q);
+    reuseBlock({ ...b, el: rest }, { ...old[i - shift], pieces: prevTail });
+    b.pieces.push(...prevTail);
+    adopt(q, i + 1);
+    return true;
+  };
+
+  let body: HTMLElement | undefined;
+  if (tail) {
+    body = newPage(start, true);
+  }
+  for (let i = start; i < n; i++) {
+    const b = blocks[i];
+    // \onecolumn / \twocolumn の切替は LaTeX と同じく改ページ
+    if (!body || (b.segStart && !tail)) {
+      if (resync(i)) {
         break;
       }
+      body = newPage(i, false);
     }
+    let block: Element | undefined = tail ?? b.el;
+    if (tail) {
+      b.pieces.push(tail);
+      tail = undefined;
+    }
+    while (block) {
+      body.appendChild(block);
+      if (!overflows(body, b.two)) {
+        break;
+      }
+      const rest = splitParagraph(block, body, b.two);
+      if (rest) {
+        pages[pages.length - 1].end = i;
+        if (resyncTail(i, b, rest)) {
+          body = undefined;
+          break;
+        }
+        b.pieces.push(rest);
+        body = newPage(i, true);
+        block = rest;
+        continue;
+      }
+      if (body.children.length > 1) {
+        block.remove();
+        if (resync(i)) {
+          body = undefined;
+          break;
+        }
+        body = newPage(i, false);
+        body.appendChild(block);
+      }
+      break;
+    }
+    if (!body) {
+      break;
+    }
+    pages[pages.length - 1].end = i;
   }
+  layouts[slot] = { docKey, blocks, pages };
 }
 
-function newPage(doc: HTMLElement, two: boolean): HTMLElement {
-  const page = document.createElement('div');
-  page.className = 'page';
-  doc.appendChild(page);
-  if (!two) {
-    return page;
+/** 前回分割したブロックの断片を今回のものとして使う（行番号だけ今回の値に直す） */
+function reuseBlock(b: Block, prev: Block) {
+  const lined = (els: Element[]) => els.flatMap((e) => [e, ...Array.from(e.querySelectorAll('[data-line]'))]).filter((e) => e.hasAttribute('data-line'));
+  const from = lined([b.el]);
+  const to = lined(prev.pieces);
+  for (let k = 0; k < Math.min(from.length, to.length); k++) {
+    to[k].setAttribute('data-line', from[k].getAttribute('data-line')!);
   }
-  const cols = document.createElement('div');
-  cols.className = 'twocolumn';
-  page.appendChild(cols);
-  return cols;
+  b.el = prev.el;
+  b.pieces = prev.pieces;
 }
 
 /**
@@ -349,8 +507,14 @@ window.addEventListener('message', async (event: MessageEvent<ToWebview>) => {
   if (msg.type === 'update') {
     const version = ++updateVersion;
     const scrollY = window.scrollY;
+    const T0 = performance.now(); const lap = (l) => console.log(l, (performance.now() - T0).toFixed(0)); 
     content.innerHTML = msg.html;
+    lap("innerHTML"); void document.body.offsetHeight; lap("layoutAll");
+    const docs = Array.from(content.querySelectorAll<HTMLElement>('.doc.paged'));
+    const blocks = docs.map(collectBlocks);
+    lap("collect");
     renderMath(content, msg.macros);
+    lap("math");
     // 画像の大きさが決まってからページ分割する
     await Promise.all(Array.from(content.querySelectorAll('img')).map((img) => img.decode().catch(() => undefined)));
     if (version !== updateVersion) {
@@ -359,7 +523,11 @@ window.addEventListener('message', async (event: MessageEvent<ToWebview>) => {
     // ページ分割は等倍で測る
     const zoom = content.style.zoom;
     content.style.zoom = '1';
-    content.querySelectorAll<HTMLElement>('.doc.paged').forEach(paginate);
+    // 文書クラスの寸法やマクロが変わったら前回の分割は使えない
+    const macrosKey = JSON.stringify(msg.macros);
+    docs.forEach((doc, k) => paginate(doc, blocks[k], `${doc.className}|${doc.getAttribute('style')}|${macrosKey}`, k));
+    lap("paginate"); void document.body.offsetHeight; lap("layoutAfter");
+    layouts.length = docs.length;
     content.style.zoom = zoom;
     // 段組みの有無で最小幅が変わるので再計算
     applyZoom();
