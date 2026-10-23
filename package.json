@@ -97,7 +97,8 @@
     "watch-web": "node esbuild.mjs --watch",
     "package-web": "node esbuild.mjs --production",
     "run-in-browser": "node scripts/run-in-browser.mjs",
-    "test": "node test/golden.mjs"
+    "test": "node test/golden.mjs",
+    "release": "node scripts/publish.mjs"
   },
   "devDependencies": {
     "@types/katex": "^0.16.8",
