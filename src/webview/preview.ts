@@ -653,6 +653,8 @@ window.addEventListener('message', async (event: MessageEvent<ToWebview>) => {
       return;
     }
     abortPending();
+    /** 最初に表示した直後のスクロール位置 */
+    let scrolledTo = -1;
     const macrosKey = JSON.stringify(msg.macros);
     const docKeys = docs.map((doc) => `${doc.className}|${doc.getAttribute('style')}|${macrosKey}`);
     // 前回と同じ 1 つの文書なら、画面のページを残したまま変わったところだけ組み直す
@@ -703,6 +705,10 @@ window.addEventListener('message', async (event: MessageEvent<ToWebview>) => {
           math.finish();
           pending = undefined;
           applyZoom();
+          // エディタの位置がまだ組んでいなかったページにあったかもしれないので、見ている人が動かしていなければ合わせ直す
+          if (scrollSync && typeof msg.line === 'number' && window.scrollY === scrolledTo) {
+            scrollToLine(msg.line);
+          }
         };
         setTimeout(run, 0);
       }
@@ -720,6 +726,7 @@ window.addEventListener('message', async (event: MessageEvent<ToWebview>) => {
       ignoreScrollUntil = Date.now() + 200;
       window.scrollTo(0, scrollY);
     }
+    scrolledTo = window.scrollY;
   } else if (msg.type === 'config') {
     scrollSync = msg.scrollSync;
   } else if (msg.type === 'scrollTo' && scrollSync) {
