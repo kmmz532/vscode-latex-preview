@@ -5,20 +5,39 @@ import { renderColumns } from './blocks';
 import { localeFor } from './locale';
 import { Counters, Labels } from './numbering';
 import { registry } from './registry';
+import { collectResources, DocumentResources } from './resources';
 import { escapeHtml, plain } from './text';
 import type { Ctx, Meta, RenderOptions, RenderResult } from './types';
 
 export type { RenderOptions, RenderResult } from './types';
+export type { DocumentResources } from './resources';
 export { escapeHtml } from './text';
 
-export function renderDocument(src: string, opts: RenderOptions): RenderResult {
-  let nodes: Node[];
-  let macros: Record<string, string>;
+/** 解析の結果。描画の前に参照ファイルを読み込めるよう、構文木と参照を分けて返す */
+export type Analysis =
+  | { ok: true; nodes: Node[]; macros: Record<string, string>; resources: DocumentResources }
+  | { ok: false; error: string; resources: DocumentResources };
+
+/** ソースを構文木にし、外部ファイルの参照を集める */
+export function analyzeDocument(src: string): Analysis {
   try {
-    ({ nodes, macros } = parseDocument(src, registry().syntax));
+    const { nodes, macros } = parseDocument(src, registry().syntax);
+    return { ok: true, nodes, macros, resources: collectResources(nodes) };
   } catch (e) {
-    return { html: `<pre class="error">Parse error: ${escapeHtml(String(e))}</pre>`, macros: {} };
+    return { ok: false, error: String(e), resources: collectResources([]) };
   }
+}
+
+export function renderDocument(src: string, opts: RenderOptions): RenderResult {
+  return renderAnalysis(analyzeDocument(src), opts);
+}
+
+/** 解析結果を HTML にする（参照ファイルの中身は opts で渡す） */
+export function renderAnalysis(analysis: Analysis, opts: RenderOptions): RenderResult {
+  if (!analysis.ok) {
+    return { html: `<pre class="error">Parse error: ${escapeHtml(analysis.error)}</pre>`, macros: {} };
+  }
+  const { nodes, macros } = analysis;
   const layout = computeLayout(nodes, plain);
   const meta: Meta = {};
   collectMeta(nodes, meta);

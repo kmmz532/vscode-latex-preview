@@ -5,16 +5,6 @@ export interface BibEntry {
   fields: Record<string, string>;
 }
 
-/** \bibliography{a,b} で指定された .bib のファイル名（拡張子なし）。コメント行は除く */
-export function findBibliographyFiles(src: string): string[] {
-  const code = src.replace(/(^|[^\\])%.*$/gm, '$1');
-  const names: string[] = [];
-  for (const m of code.matchAll(/\\bibliography\s*\{([^}]*)\}/g)) {
-    names.push(...m[1].split(',').map((s) => s.trim().replace(/\.bib$/, '')).filter(Boolean));
-  }
-  return names;
-}
-
 /** 簡易 BibTeX パーサ。壊れたエントリは読み飛ばす */
 export function parseBib(src: string): Map<string, BibEntry> {
   const entries = new Map<string, BibEntry>();

@@ -1,7 +1,8 @@
 import katex from 'katex';
+import type { FromWebview, ToWebview } from '../protocol';
 
 declare function acquireVsCodeApi(): {
-  postMessage(msg: unknown): void;
+  postMessage(msg: FromWebview): void;
   getState(): ViewState | undefined;
   setState(state: ViewState): void;
 };
@@ -243,13 +244,13 @@ content.addEventListener('dblclick', (e) => {
 
 let updateVersion = 0;
 
-window.addEventListener('message', async (event) => {
+window.addEventListener('message', async (event: MessageEvent<ToWebview>) => {
   const msg = event.data;
-  if (msg?.type === 'update') {
+  if (msg.type === 'update') {
     const version = ++updateVersion;
     const scrollY = window.scrollY;
     content.innerHTML = msg.html;
-    renderMath(content, msg.macros ?? {});
+    renderMath(content, msg.macros);
     // 画像の大きさが決まってからページ分割する
     await Promise.all(Array.from(content.querySelectorAll('img')).map((img) => img.decode().catch(() => undefined)));
     if (version !== updateVersion) {
@@ -269,10 +270,10 @@ window.addEventListener('message', async (event) => {
       ignoreScrollUntil = Date.now() + 200;
       window.scrollTo(0, scrollY);
     }
-  } else if (msg?.type === 'locked') {
-    lockButton.classList.toggle('active', !!msg.value);
+  } else if (msg.type === 'locked') {
+    lockButton.classList.toggle('active', msg.value);
     lockButton.title = msg.value ? 'Unlock preview (follow the active editor)' : 'Lock preview to this file';
-  } else if (msg?.type === 'scrollTo' && state.sync && typeof msg.line === 'number') {
+  } else if (msg.type === 'scrollTo' && state.sync) {
     scrollToLine(msg.line);
   }
 });

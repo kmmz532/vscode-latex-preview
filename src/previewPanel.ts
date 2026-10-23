@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import { findBibliographyFiles } from './parser/bibtex';
-import { IMAGE_EXTENSIONS, IMAGE_MIME, findGraphics } from './parser/graphics';
-import { renderDocument } from './parser/render';
+import { analyzeDocument, renderAnalysis, RenderResult } from './parser/render';
+import type { FromWebview, ToWebview } from './protocol';
+import { ResourceLoader } from './resourceLoader';
 
 /**
  * プレビューは VS Code の Markdown プレビューと同じく 2 種類。
@@ -48,10 +48,7 @@ export class PreviewPanel {
   private version = 0;
   /** プレビュー起点でエディタを動かした直後は、その反動のスクロール通知を無視する */
   private ignoreEditorScrollUntil = 0;
-  /** 参照中の .bib（変更を監視する対象） */
-  private readonly bibUris = new Set<string>();
-  /** 画像の data: URI（URI → 更新日時と中身） */
-  private readonly imageCache = new Map<string, { mtime: number; dataUri: string }>();
+  private readonly resources = new ResourceLoader(() => this.scheduleUpdate());
 
   private constructor(
     context: vscode.ExtensionContext,
@@ -70,26 +67,12 @@ export class PreviewPanel {
     this.panel.webview.html = this.shellHtml(mediaRoot);
 
     this.disposables.push(
+      this.resources,
       vscode.workspace.onDidChangeTextDocument((e) => {
-        // 参照している .bib を編集したときも更新する
-        if (e.document === this.document || this.bibUris.has(e.document.uri.toString())) {
+        if (e.document === this.document) {
           this.scheduleUpdate();
         }
       }),
-      // エディタで開いていない .bib や画像がディスク上で変わったとき
-      (() => {
-        const watcher = vscode.workspace.createFileSystemWatcher(`**/*.{bib,${IMAGE_EXTENSIONS.join(',')}}`);
-        const onFs = (uri: vscode.Uri) => {
-          const key = uri.toString();
-          if (this.bibUris.has(key) || this.imageCache.has(key) || /\.(png|jpe?g|gif|svg|webp)$/i.test(uri.path)) {
-            this.scheduleUpdate();
-          }
-        };
-        watcher.onDidChange(onFs);
-        watcher.onDidCreate(onFs);
-        watcher.onDidDelete(onFs);
-        return watcher;
-      })(),
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (e.affectsConfiguration('latexPreview')) {
           this.update();
@@ -106,15 +89,15 @@ export class PreviewPanel {
     this.disposables.push(
       vscode.window.onDidChangeTextEditorVisibleRanges((e) => {
         if (e.textEditor.document === this.document && Date.now() > this.ignoreEditorScrollUntil && e.visibleRanges.length) {
-          void this.panel.webview.postMessage({ type: 'scrollTo', line: e.visibleRanges[0].start.line });
+          this.post({ type: 'scrollTo', line: e.visibleRanges[0].start.line });
         }
       })
     );
-    this.panel.webview.onDidReceiveMessage((msg) => {
-      switch (msg?.type) {
+    this.panel.webview.onDidReceiveMessage((msg: FromWebview) => {
+      switch (msg.type) {
         case 'ready':
           // Webview のスクリプトが読み込まれてから初回描画する
-          void this.panel.webview.postMessage({ type: 'locked', value: this.locked });
+          this.post({ type: 'locked', value: this.locked });
           void this.update();
           break;
         case 'toggleLock':
@@ -123,7 +106,7 @@ export class PreviewPanel {
         case 'reveal': {
           // プレビューのスクロールにエディタを追従させる
           const editor = this.editor();
-          if (editor && typeof msg.line === 'number') {
+          if (editor) {
             this.ignoreEditorScrollUntil = Date.now() + 300;
             const pos = new vscode.Position(Math.max(0, msg.line), 0);
             editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.AtTop);
@@ -132,13 +115,11 @@ export class PreviewPanel {
         }
         case 'open': {
           // ダブルクリックした段落の行へ移動
-          if (typeof msg.line === 'number') {
-            const pos = new vscode.Position(Math.max(0, msg.line), 0);
-            void vscode.window.showTextDocument(this.document, {
-              viewColumn: this.editor()?.viewColumn ?? vscode.ViewColumn.One,
-              selection: new vscode.Range(pos, pos),
-            });
-          }
+          const pos = new vscode.Position(Math.max(0, msg.line), 0);
+          void vscode.window.showTextDocument(this.document, {
+            viewColumn: this.editor()?.viewColumn ?? vscode.ViewColumn.One,
+            selection: new vscode.Range(pos, pos),
+          });
           break;
         }
       }
@@ -156,8 +137,7 @@ export class PreviewPanel {
       return;
     }
     this.document = document;
-    this.bibUris.clear();
-    this.imageCache.clear();
+    this.resources.reset();
     this.panel.title = this.title();
     void this.update();
   }
@@ -187,7 +167,7 @@ export class PreviewPanel {
     }
     this.locked = locked;
     this.panel.title = this.title();
-    void this.panel.webview.postMessage({ type: 'locked', value: locked });
+    this.post({ type: 'locked', value: locked });
   }
 
   private scheduleUpdate() {
@@ -197,111 +177,30 @@ export class PreviewPanel {
   }
 
   private async update() {
-    // .bib の読み込み中に次の更新が始まったら古い結果は捨てる
+    // 参照ファイルの読み込み中に次の更新が始まったら古い結果は捨てる
     const version = ++this.version;
     const config = vscode.workspace.getConfiguration('latexPreview');
-    const src = this.document.getText();
-    const [bibFiles, images] = await Promise.all([this.readBibFiles(src), this.readImages(src)]);
+    const analysis = analyzeDocument(this.document.getText());
+    const loaded = await this.resources.load(this.document.uri, analysis.resources);
     if (version !== this.version) {
       return;
     }
-    let result: { html: string; macros: Record<string, string> };
+    let result: RenderResult;
     try {
-      result = renderDocument(src, {
-        showUnknownCommands: config.get<boolean>('showUnknownCommands', true),
-        bibFiles,
-        images,
-      });
+      result = renderAnalysis(analysis, { showUnknownCommands: config.get<boolean>('showUnknownCommands', true), ...loaded });
     } catch (e) {
       result = { html: `<pre class="error">${String(e)}</pre>`, macros: {} };
     }
     // 描画後にエディタの表示位置へ合わせる
-    const editor = this.editor();
-    void this.panel.webview.postMessage({ type: 'update', ...result, line: editor?.visibleRanges[0]?.start.line });
+    this.post({ type: 'update', ...result, line: this.editor()?.visibleRanges[0]?.start.line });
+  }
+
+  private post(msg: ToWebview) {
+    void this.panel.webview.postMessage(msg);
   }
 
   private editor(): vscode.TextEditor | undefined {
     return vscode.window.visibleTextEditors.find((e) => e.document === this.document);
-  }
-
-  /**
-   * \includegraphics の画像を読み、data: URI にする（仮想ファイルシステムでも動くよう workspace.fs を使う）。
-   * 更新日時が同じならキャッシュを使う。EPS / PDF など表示できないものは含めない
-   */
-  private async readImages(src: string): Promise<Record<string, string>> {
-    const dir = vscode.Uri.joinPath(this.document.uri, '..');
-    const { paths, dirs } = findGraphics(src);
-    const out: Record<string, string> = {};
-    const used = new Set<string>();
-    await Promise.all(
-      paths.map(async (p) => {
-        const hasExt = /\.[a-zA-Z0-9]+$/.test(p);
-        const candidates: vscode.Uri[] = [];
-        for (const d of ['', ...dirs]) {
-          const base = vscode.Uri.joinPath(dir, d, p);
-          if (hasExt) {
-            candidates.push(base);
-          } else {
-            candidates.push(...IMAGE_EXTENSIONS.map((e) => base.with({ path: `${base.path}.${e}` })));
-          }
-        }
-        for (const uri of candidates) {
-          const ext = uri.path.split('.').pop()!.toLowerCase();
-          let stat: vscode.FileStat;
-          try {
-            stat = await vscode.workspace.fs.stat(uri);
-          } catch {
-            continue;
-          }
-          // 最初に見つかったファイルで決める（EPS / PDF ならプレースホルダ）
-          const mime = IMAGE_MIME[ext];
-          if (!mime || stat.size > MAX_IMAGE_BYTES) {
-            return;
-          }
-          const key = uri.toString();
-          used.add(key);
-          let cached = this.imageCache.get(key);
-          if (!cached || cached.mtime !== stat.mtime) {
-            const bytes = await vscode.workspace.fs.readFile(uri);
-            cached = { mtime: stat.mtime, dataUri: `data:${mime};base64,${toBase64(bytes)}` };
-            this.imageCache.set(key, cached);
-          }
-          out[p] = cached.dataUri;
-          return;
-        }
-      })
-    );
-    // 参照されなくなった画像はキャッシュから捨てる
-    for (const key of [...this.imageCache.keys()]) {
-      if (!used.has(key)) {
-        this.imageCache.delete(key);
-      }
-    }
-    return out;
-  }
-
-  /** \bibliography{...} の .bib を .tex と同じフォルダから読む。開いているものは未保存の内容を使う */
-  private async readBibFiles(src: string): Promise<Record<string, string>> {
-    const dir = vscode.Uri.joinPath(this.document.uri, '..');
-    const out: Record<string, string> = {};
-    this.bibUris.clear();
-    await Promise.all(
-      findBibliographyFiles(src).map(async (name) => {
-        const uri = vscode.Uri.joinPath(dir, `${name}.bib`);
-        this.bibUris.add(uri.toString());
-        const open = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
-        if (open) {
-          out[name] = open.getText();
-          return;
-        }
-        try {
-          out[name] = new TextDecoder().decode(await vscode.workspace.fs.readFile(uri));
-        } catch {
-          // 見つからない .bib はプレビュー側で「見つかりません」と表示する
-        }
-      })
-    );
-    return out;
   }
 
   private shellHtml(mediaRoot: vscode.Uri): string {
@@ -334,18 +233,6 @@ export class PreviewPanel {
     }
     this.disposables.forEach((d) => d.dispose());
   }
-}
-
-/** これより大きい画像は読み込まない（更新のたびに Webview へ送るため） */
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-
-function toBase64(bytes: Uint8Array): string {
-  let bin = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(bin);
 }
 
 function makeNonce(): string {
