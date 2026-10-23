@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { findBibliographyFiles } from './parser/bibtex';
 import { renderDocument } from './parser/renderer';
 
 export class PreviewPanel {
@@ -16,6 +17,9 @@ export class PreviewPanel {
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
   private timer: ReturnType<typeof setTimeout> | undefined;
+  private version = 0;
+  /** 参照中の .bib（変更を監視する対象） */
+  private readonly bibUris = new Set<string>();
 
   private constructor(context: vscode.ExtensionContext, private readonly document: vscode.TextDocument, column: vscode.ViewColumn) {
     const mediaRoot = vscode.Uri.joinPath(context.extensionUri, 'dist', 'web');
@@ -29,10 +33,24 @@ export class PreviewPanel {
 
     this.disposables.push(
       vscode.workspace.onDidChangeTextDocument((e) => {
-        if (e.document === this.document) {
+        // 参照している .bib を編集したときも更新する
+        if (e.document === this.document || this.bibUris.has(e.document.uri.toString())) {
           this.scheduleUpdate();
         }
       }),
+      // エディタで開いていない .bib がディスク上で変わったとき
+      (() => {
+        const watcher = vscode.workspace.createFileSystemWatcher('**/*.bib');
+        const onFs = (uri: vscode.Uri) => {
+          if (this.bibUris.has(uri.toString())) {
+            this.scheduleUpdate();
+          }
+        };
+        watcher.onDidChange(onFs);
+        watcher.onDidCreate(onFs);
+        watcher.onDidDelete(onFs);
+        return watcher;
+      })(),
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (e.affectsConfiguration('latexPreview')) {
           this.update();
@@ -59,17 +77,49 @@ export class PreviewPanel {
     this.timer = setTimeout(() => this.update(), ms);
   }
 
-  private update() {
+  private async update() {
+    // .bib の読み込み中に次の更新が始まったら古い結果は捨てる
+    const version = ++this.version;
     const config = vscode.workspace.getConfiguration('latexPreview');
+    const src = this.document.getText();
+    const bibFiles = await this.readBibFiles(src);
+    if (version !== this.version) {
+      return;
+    }
     let result: { html: string; macros: Record<string, string> };
     try {
-      result = renderDocument(this.document.getText(), {
+      result = renderDocument(src, {
         showUnknownCommands: config.get<boolean>('showUnknownCommands', true),
+        bibFiles,
       });
     } catch (e) {
       result = { html: `<pre class="error">${String(e)}</pre>`, macros: {} };
     }
     void this.panel.webview.postMessage({ type: 'update', ...result });
+  }
+
+  /** \bibliography{...} の .bib を .tex と同じフォルダから読む。開いているものは未保存の内容を使う */
+  private async readBibFiles(src: string): Promise<Record<string, string>> {
+    const dir = vscode.Uri.joinPath(this.document.uri, '..');
+    const out: Record<string, string> = {};
+    this.bibUris.clear();
+    await Promise.all(
+      findBibliographyFiles(src).map(async (name) => {
+        const uri = vscode.Uri.joinPath(dir, `${name}.bib`);
+        this.bibUris.add(uri.toString());
+        const open = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
+        if (open) {
+          out[name] = open.getText();
+          return;
+        }
+        try {
+          out[name] = new TextDecoder().decode(await vscode.workspace.fs.readFile(uri));
+        } catch {
+          // 見つからない .bib はプレビュー側で「見つかりません」と表示する
+        }
+      })
+    );
+    return out;
   }
 
   private shellHtml(mediaRoot: vscode.Uri): string {

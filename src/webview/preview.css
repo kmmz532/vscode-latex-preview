@@ -114,11 +114,16 @@ h4, h5, h6 { font-size: 1em; }
 }
 .unknown-env { border-left: 2px solid var(--vscode-panel-border, #8884); padding-left: 0.8em; margin: 1em 0; }
 
-.cite, .ref { color: var(--vscode-textLink-foreground); }
-.footnote { font-size: 0.8em; vertical-align: super; color: var(--vscode-descriptionForeground); }
+/* 本文中の要素は論文と同じく装飾しない（色・背景は付けない） */
+.cite, .ref, .link { color: inherit; }
+.footnote { font-size: 0.8em; vertical-align: super; }
 .footnote::before { content: '('; }
 .footnote::after { content: ')'; }
-.bibliography { margin-top: 2em; color: var(--vscode-descriptionForeground); font-style: italic; }
+.bib-list { font-size: 0.95em; }
+.bibitem { display: flex; gap: 0.5em; margin: 0.2em 0; text-align: left; }
+.bib-label { flex: none; }
+.bib-body { flex: 1; min-width: 0; }
+.bib-missing { color: var(--vscode-descriptionForeground, #888); font-size: 0.85em; text-indent: 0; }
 
 .float { margin: 1.5em 0; text-align: center; break-inside: avoid; }
 .twocolumn > .float.span { column-span: all; }
@@ -155,7 +160,16 @@ li.custom { list-style: none; }
 .item-label { font-weight: bold; }
 dt { font-weight: bold; }
 dd p, li p { margin: 0.2em 0; }
-code { font-family: KaTeX_Typewriter, var(--gothic), monospace; }
+/* VS Code が Webview に入れる code の既定スタイル（背景・余白・色）を打ち消す */
+.doc code {
+  font-family: KaTeX_Typewriter, var(--gothic), monospace;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+.doc code.url { overflow-wrap: anywhere; }
 .error { color: var(--vscode-errorForeground, #f44); }
 
 .toolbar {

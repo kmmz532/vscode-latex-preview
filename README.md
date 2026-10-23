@@ -1,48 +1,52 @@
 # Simple LaTeX Preview
-LaTeXを簡易プレビューするVSCode拡張機能<br />
-既存のLaTeX拡張機能とは異なり、Web版（vscode.dev / github.dev）でも動作する
+English | [日本語](README.ja.md)
+
+A lightweight LaTeX preview for VS Code.<br />
+Unlike other LaTeX extensions, it also works in VS Code for the Web (vscode.dev / github.dev). No TeX installation is required.
 
 - https://marketplace.visualstudio.com/items?itemName=kmmz1127.simple-latex-preview
 
-## 使い方
-1. `.tex` ファイルを開く
-2. エディタ右上のプレビューアイコン、またはコマンドパレットから `LaTeX Preview: Open Preview to the Side` を実行
-3. 編集内容はリアルタイムに反映される
+## Usage
+1. Open a `.tex` file
+2. Click the preview icon at the top right of the editor, or run `LaTeX Preview: Open Preview to the Side` from the Command Palette
+3. The preview updates as you type
 
-プレビュー右上のボタンで拡大/縮小（`−` / `+`）、等倍（`100%`）、窓幅に合わせる（Fit）を切り替えられる。
+Use the buttons at the top right of the preview to zoom out / in (`−` / `+`), show at actual size (`100%`), or fit to the window (Fit).
 
-## 対応している記法
-- 数式: `$...$` `\(...\)` `$$...$$` `\[...\]`、`equation` `align` `gather` `multline`（KaTeX で描画）
-- 見出し: `\section` 〜 `\subsubsection`（自動採番）、`\paragraph`
+## Supported syntax
+- Math: `$...$` `\(...\)` `$$...$$` `\[...\]`, `equation` `align` `gather` `multline` (rendered with KaTeX)
+- Headings: `\section` to `\subsubsection` (numbered), `\paragraph`
 - `\title` `\author` `\date` `\maketitle`
-- 文字装飾: `\textbf` `\textit` `\emph` `\texttt` `\underline` など
-- リスト: `itemize` `enumerate` `description`
-- `figure` / `table` と `\caption`（画像はファイル名の枠で表示）
-- 表: `tabular` `tabular*` `tabularx`（`l` `c` `r` `p{幅}`、縦線 `|`、`\hline`、`\multicolumn`）
-- マクロ: `\newcommand` `\renewcommand` `\providecommand` `\def`（引数・オプション引数の既定値に対応。数式中でも使える）
-- `\cite` `\ref` の簡易表示
-- 文書クラス（`jsarticle` / `article` 系）に合わせた文字サイズ・行送り・字下げ
-- `twocolumn` による 2 段組と、`\textheight` に基づくページ分割
-- プリアンブルの `\setlength`（`\textwidth` `\textheight` `\columnsep` `\parindent`）
+- Text styles: `\textbf` `\textit` `\emph` `\texttt` `\underline`, etc.
+- Lists: `itemize` `enumerate` `description`
+- `figure` / `table` with `\caption` (images are shown as a placeholder with the file name)
+- Tables: `tabular` `tabular*` `tabularx` (`l` `c` `r` `p{width}`, vertical rules `|`, `\hline`, `\multicolumn`)
+- Macros: `\newcommand` `\renewcommand` `\providecommand` `\def` (with arguments and default optional arguments; also usable inside math)
+- Bibliography: `\bibliography` reads `.bib` files in the same folder as the `.tex` file; `\bibliographystyle` decides the order (citation order for `unsrt` / `junsrt`, by author otherwise; `alpha` labels). `thebibliography` / `\bibitem` and `\cite` / `\nocite` are also supported
+- Basic display of `\ref`
+- Font size, line spacing and indentation based on the document class (`jsarticle` / `article` families)
+- Two-column layout with `twocolumn`, and page breaks based on `\textheight`
+- `\setlength` in the preamble (`\textwidth` `\textheight` `\columnsep` `\parindent`)
 
-未対応のコマンドはエラーにせず、薄い色でそのまま表示する。
+Unsupported commands do not cause errors; they are shown as dimmed source text.
 
-## 設定
-| 設定 | デフォルト | 備考 |
+## Settings
+| Setting | Default | Description |
 | --- | --- | --- |
-| `latexPreview.debounceMs` | `200` | 編集からプレビュー更新までの待ち時間（ms） |
-| `latexPreview.showUnknownCommands` | `true` | 未対応コマンドをソースのまま表示する |
+| `latexPreview.debounceMs` | `200` | Delay in milliseconds before the preview updates after an edit |
+| `latexPreview.showUnknownCommands` | `true` | Show unsupported commands as dimmed source text |
 
-## 制限
-- 段落はページをまたいで分割しない
-- 画像の読み込み、`\input` / `\include`、`\cline`、`\multirow` などは未対応
-- `\def` の区切り付きパラメータ（`\def\foo#1.{...}` など）は未対応
-- 寸法のデフォルトは各文書クラスの近似値
+## Limitations
+- Paragraphs are not split across pages
+- Image loading, `\input` / `\include`, `\cline`, `\multirow`, etc. are not supported
+- `\def` with delimited parameters (e.g. `\def\foo#1.{...}`) is not supported
+- Default dimensions are approximations of each document class
+- Bibliography entries are formatted in a simplified `plain`-like style regardless of `\bibliographystyle`
 
-## バグ報告、要望
+## Bug reports and feature requests
 - https://github.com/kmmz532/vscode-latex-preview/issues
 
-開発者向けの情報は [docs/README.md](docs/README.md) を参照。
+For developers, see [docs/README.md](docs/README.md) (Japanese).
 
 ## License
 - MIT
