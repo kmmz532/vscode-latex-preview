@@ -2,7 +2,7 @@ import type { Node } from '../../parser';
 import { renderBlocks, renderInline } from '../blocks';
 import { refStepCounter } from '../numbering';
 import { escapeHtml, plain, renderText } from '../text';
-import { block, CommandHandler, EnvHandler, ignore, inline, NOTHING, Package } from '../types';
+import { block, CommandHandler, Ctx, EnvHandler, ignore, inline, NOTHING, Package } from '../types';
 
 const wrap = (tag: string, cls?: string): CommandHandler => (n, ctx) =>
   inline(`<${tag}${cls ? ` class="${cls}"` : ''}>${renderInline(n.args[0], ctx)}</${tag}>`);
@@ -21,10 +21,13 @@ const heading = (level: number, counter?: string): CommandHandler => (n, ctx) =>
 
 const symbol = (s: string): CommandHandler => () => inline(s);
 
-const missingInput: CommandHandler = (n) => {
+/** 見つからないファイルの注記（文言は拡張機能側で表示言語に合わせて渡せる） */
+export const notFound = (ctx: Ctx, files: string) => ctx.opts.notFound?.(files) ?? `${files} が見つかりません`;
+
+const missingInput: CommandHandler = (n, ctx) => {
   const name = plain(n.args[0]).trim();
   const file = /\.[a-zA-Z0-9]+$/.test(name) ? name : `${name}.tex`;
-  return block(`<p class="missing" data-line="${n.line}">${escapeHtml(file)} が見つかりません</p>`);
+  return block(`<p class="missing" data-line="${n.line}">${escapeHtml(notFound(ctx, file))}</p>`);
 };
 
 /** \item ごとに子ノードを分割する */

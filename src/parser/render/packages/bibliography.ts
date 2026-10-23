@@ -2,13 +2,14 @@ import { BibEntry, parseBib, splitAuthors } from '../../bibtex';
 import type { Node } from '../../parser';
 import { renderInline } from '../blocks';
 import { parseFragment } from '../registry';
+import { notFound } from './base';
 import { escapeHtml, plain, renderText, walk } from '../text';
 import { BibState, block, CommandHandler, CommandNode, Ctx, EnvNode, ignore, inline, Out, Package } from '../types';
 
 /** 引用コマンド（文献リストの収集にも使う） */
 const CITE_COMMANDS = ['cite', 'citep', 'citet'];
 
-/** cite と文献リスト（ibliography の .bib / thebibliography 環境） */
+/** cite と文献リスト（\bibliography の .bib / thebibliography 環境） */
 export const bibliography: Package = {
   commands: {
     ...Object.fromEntries(CITE_COMMANDS.map((c): [string, CommandHandler] => [c, renderCite])),
@@ -109,7 +110,7 @@ function renderBibliography(n: CommandNode, ctx: Ctx): Out {
     .filter((k) => ctx.bib.entries.has(k))
     .map((k) => bibItem(ctx.bib.labels.get(k) ?? '?', formatEntry(ctx.bib.entries.get(k)!, ctx), k));
   const note = missing.length
-    ? `<p class="bib-missing">${escapeHtml(missing.map((f) => f.replace(/\.bib$/, '') + '.bib').join(', '))} が見つかりません</p>`
+    ? `<p class="bib-missing">${escapeHtml(notFound(ctx, missing.map((f) => f.replace(/\.bib$/, '') + '.bib').join(', ')))}</p>`
     : '';
   return block(bibSection(n.line, items.join('') + note, ctx));
 }

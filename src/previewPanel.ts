@@ -153,7 +153,8 @@ export class PreviewPanel {
   }
 
   private title(): string {
-    return `${this.locked ? '[Locked] ' : ''}Preview ${basename(this.document.uri)}`;
+    // 固定中かどうかはタブ右上の鍵アイコンで分かるので、タブ名には出さない
+    return vscode.l10n.t('Preview {0}', basename(this.document.uri));
   }
 
   /** 表示するファイルを差し替える（追従するプレビュー用） */
@@ -232,6 +233,7 @@ export class PreviewPanel {
       result = renderAnalysis(analysis, {
         showUnknownCommands: config.get<boolean>('showUnknownCommands', true),
         paginate: config.get<boolean>('paginate', true),
+        notFound: (files) => vscode.l10n.t('{0} not found', files),
         inputs,
         ...loaded,
       });

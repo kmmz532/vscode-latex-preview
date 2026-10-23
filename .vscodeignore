@@ -6,3 +6,4 @@ dist/web/**/*.map
 !images/icon.png
 !package.nls.json
 !package.nls.ja.json
+!l10n/**

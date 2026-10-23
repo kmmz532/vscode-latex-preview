@@ -13,6 +13,8 @@ export interface RenderOptions {
   inputs?: Record<string, string>;
   /** false なら \documentclass があってもページに分けず、1 枚に続けて表示する */
   paginate?: boolean;
+  /** 見つからないファイル（カンマ区切り）の注記。省略時は「〇〇 が見つかりません」 */
+  notFound?: (files: string) => string;
 }
 
 export interface RenderResult {
