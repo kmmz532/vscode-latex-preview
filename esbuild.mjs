@@ -1,8 +1,15 @@
 import * as esbuild from 'esbuild';
-import { cpSync, mkdirSync } from 'node:fs';
+import { cpSync, mkdirSync, rmSync } from 'node:fs';
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
+
+// 本番ビルドに前回の開発ビルドの .map が混ざらないよう消す
+if (production) {
+  for (const f of ['extension.js.map', 'preview.js.map']) {
+    rmSync(`dist/web/${f}`, { force: true });
+  }
+}
 
 // KaTeX の CSS / フォントと Webview 用 CSS を dist にコピー
 mkdirSync('dist/web/katex', { recursive: true });
