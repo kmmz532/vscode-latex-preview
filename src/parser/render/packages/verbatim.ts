@@ -2,10 +2,12 @@ import type { Node } from '../../parser';
 import { renderInline } from '../blocks';
 import { parseFragment } from '../registry';
 import { escapeHtml, parseKeyValues } from '../text';
+import { refStepCounter } from '../numbering';
 import { block, Ctx, inline, Out, Package } from '../types';
 
 /** verbatim / listings / minted。中身はトークナイザが verb ノードとして切り出し、renderVerb で描画する */
 export const verbatim: Package = {
+  counters: { listing: {} },
   // comment は中身ごと捨てる（トークナイザで処理）
   verbatimEnvironments: ['verbatim', 'verbatim*', 'Verbatim', 'lstlisting', 'minted', 'comment'],
 };
@@ -20,12 +22,11 @@ export function renderVerb(n: Extract<Node, { kind: 'verb' }>, ctx: Ctx): Out {
   const opts = parseKeyValues(n.opt ?? '');
   let caption = '';
   if (opts.caption !== undefined) {
-    ctx.counters.listing++;
-    ctx.currentLabel = String(ctx.counters.listing);
-    caption = `<div class="caption">Listing ${ctx.counters.listing}: ${renderInline(parseFragment(opts.caption), ctx)}</div>`;
+    const num = refStepCounter(ctx, 'listing');
+    caption = `<div class="caption">${ctx.locale.listingName} ${num}: ${renderInline(parseFragment(opts.caption), ctx)}</div>`;
   }
   if (opts.label) {
-    ctx.collected.set(opts.label, ctx.currentLabel);
+    ctx.labels.define(opts.label);
   }
   return block(`<figure class="listing" data-line="${n.line}">${caption}<pre class="verbatim">${escapeHtml(visible(n.text))}</pre></figure>`);
 }

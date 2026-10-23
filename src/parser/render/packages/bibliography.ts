@@ -133,7 +133,7 @@ function renderTheBibliography(n: EnvNode, ctx: Ctx): Out {
 
 function bibSection(line: number, items: string, ctx: Ctx): string {
   // \refname は jsarticle 系で「参考文献」、article 系で References（番号なしの \section*）
-  const title = ctx.japanese ? '参考文献' : 'References';
+  const title = ctx.locale.refName;
   return `<section class="bibliography" data-line="${line}"><h2>${title}</h2><div class="bib-list">${items}</div></section>`;
 }
 

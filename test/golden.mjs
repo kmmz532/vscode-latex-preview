@@ -7,6 +7,14 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const update = process.argv.includes('--update');
+
+// \today の結果が実行日で変わらないよう、現在日時を固定する
+const RealDate = Date;
+globalThis.Date = class extends RealDate {
+  constructor(...args) {
+    super(...(args.length ? args : [2024, 0, 2]));
+  }
+};
 const dir = 'test/fixtures';
 const out = join(mkdtempSync(join(tmpdir(), 'latex-preview-')), 'render.mjs');
 await esbuild.build({ entryPoints: ['src/parser/render/index.ts'], bundle: true, platform: 'node', format: 'esm', outfile: out, logLevel: 'warning' });

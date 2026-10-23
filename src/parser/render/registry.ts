@@ -5,6 +5,7 @@ import { graphicx } from './packages/graphicx';
 import { math } from './packages/math';
 import { tabular } from './packages/tabular';
 import { verbatim } from './packages/verbatim';
+import type { CounterDef } from './numbering';
 import type { CommandDef, EnvDef, Package } from './types';
 
 /** 有効なパッケージ。新しい機能はパッケージを作ってここに足す */
@@ -13,6 +14,7 @@ const packages = (): Package[] => [base, math, verbatim, tabular, graphicx, bibl
 interface Registry {
   commands: Map<string, CommandDef>;
   environments: Map<string, EnvDef>;
+  counters: Map<string, CounterDef>;
   syntax: Syntax;
 }
 
@@ -28,11 +30,12 @@ export function registry(): Registry {
   }
   const commands = new Map<string, CommandDef>();
   const environments = new Map<string, EnvDef>();
+  const counters = new Map<string, CounterDef>();
   const mathEnvs = new Set<string>();
   const verbatimEnvs = new Set<string>();
   const add = <T>(map: Map<string, T>, name: string, def: T) => {
     if (map.has(name)) {
-      throw new Error(`\\${name} is defined by more than one package`);
+      throw new Error(`"${name}" is defined by more than one package`);
     }
     map.set(name, def);
   };
@@ -43,6 +46,9 @@ export function registry(): Registry {
     for (const [name, def] of Object.entries(pkg.environments ?? {})) {
       add(environments, name, typeof def === 'function' ? { render: def } : def);
     }
+    for (const [name, def] of Object.entries(pkg.counters ?? {})) {
+      add(counters, name, def);
+    }
     pkg.mathEnvironments?.forEach((e) => mathEnvs.add(e));
     pkg.verbatimEnvironments?.forEach((e) => verbatimEnvs.add(e));
   }
@@ -52,7 +58,7 @@ export function registry(): Registry {
     commandArgs: (name) => commands.get(name)?.args,
     envArgs: (name) => environments.get(name)?.args ?? 0,
   };
-  cache = { commands, environments, syntax };
+  cache = { commands, environments, counters, syntax };
   return cache;
 }
 

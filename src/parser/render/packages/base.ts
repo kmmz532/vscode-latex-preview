@@ -1,23 +1,20 @@
 import type { Node } from '../../parser';
 import { renderBlocks, renderInline } from '../blocks';
-import { escapeHtml, plain, renderText, today } from '../text';
+import { refStepCounter } from '../numbering';
+import { escapeHtml, plain, renderText } from '../text';
 import { block, CommandHandler, EnvHandler, ignore, inline, NOTHING, Package } from '../types';
 
 const wrap = (tag: string, cls?: string): CommandHandler => (n, ctx) =>
   inline(`<${tag}${cls ? ` class="${cls}"` : ''}>${renderInline(n.args[0], ctx)}</${tag}>`);
 
 /**
- * 見出し。depth は採番の階層（section=0, subsection=1, subsubsection=2）。
- * article 系の既定（secnumdepth=3）に合わせ、それより下と * 付きは番号なし
+ * 見出し。counter は採番に使うカウンタ。
+ * article 系の既定（secnumdepth=3）に合わせ、subsubsection より下と * 付きは番号なし
  */
-const heading = (level: number, depth?: number): CommandHandler => (n, ctx) => {
+const heading = (level: number, counter?: string): CommandHandler => (n, ctx) => {
   let num = '';
-  if (depth !== undefined && !n.name.endsWith('*')) {
-    const c = ctx.counters.section;
-    c[depth]++;
-    c.fill(0, depth + 1);
-    ctx.currentLabel = c.slice(0, depth + 1).join('.');
-    num = `<span class="secnum">${ctx.currentLabel}</span>`;
+  if (counter && !n.name.endsWith('*')) {
+    num = `<span class="secnum">${refStepCounter(ctx, counter)}</span>`;
   }
   return block(`<h${level} data-line="${n.line}">${num}${renderInline(n.args[0], ctx) || '&nbsp;'}</h${level}>`);
 };
@@ -70,23 +67,30 @@ const maketitle: CommandHandler = (n, ctx) => {
     html += `<div class="author">${renderInline(author, ctx)}</div>`;
   }
   // \date 未指定時は \today 扱い
-  html += `<div class="date">${date ? renderInline(date, ctx) : today()}</div>`;
+  html += `<div class="date">${date ? renderInline(date, ctx) : ctx.locale.today()}</div>`;
   return block(html + '</header>');
 };
 
 /** LaTeX 本体（article 系の文書クラス）が持つコマンドと環境 */
 export const base: Package = {
+  counters: {
+    section: {},
+    subsection: { within: 'section' },
+    subsubsection: { within: 'subsection' },
+    figure: {},
+    table: {},
+  },
   commands: {
     part: heading(1),
     chapter: heading(1),
     'part*': heading(1),
     'chapter*': heading(1),
-    section: heading(2, 0),
-    'section*': heading(2, 0),
-    subsection: heading(3, 1),
-    'subsection*': heading(3, 1),
-    subsubsection: heading(4, 2),
-    'subsubsection*': heading(4, 2),
+    section: heading(2, 'section'),
+    'section*': heading(2, 'section'),
+    subsection: heading(3, 'subsection'),
+    'subsection*': heading(3, 'subsection'),
+    subsubsection: heading(4, 'subsubsection'),
+    'subsubsection*': heading(4, 'subsubsection'),
     paragraph: heading(5),
     'paragraph*': heading(5),
     subparagraph: heading(6),
@@ -113,16 +117,16 @@ export const base: Package = {
     title: ignore,
     author: ignore,
     date: ignore,
-    today: { args: 0, render: () => inline(today()) },
+    today: { args: 0, render: (_, ctx) => inline(ctx.locale.today()) },
     and: symbol('<span class="and"></span>'),
     thanks: (n, ctx) => inline(`<span class="footnote">${renderInline(n.args[0], ctx)}</span>`),
 
     // 未定義のラベルは LaTeX と同じく ??
-    ref: (n, ctx) => inline(`<span class="ref">${escapeHtml(ctx.labels.get(plain(n.args[0]).trim()) ?? '??')}</span>`),
-    eqref: (n, ctx) => inline(`<span class="ref">(${escapeHtml(ctx.labels.get(plain(n.args[0]).trim()) ?? '??')})</span>`),
+    ref: (n, ctx) => inline(`<span class="ref">${ctx.labels.ref(plain(n.args[0]).trim())}</span>`),
+    eqref: (n, ctx) => inline(`<span class="ref">(${ctx.labels.ref(plain(n.args[0]).trim())})</span>`),
     pageref: () => inline('<span class="ref">??</span>'),
     label: (n, ctx) => {
-      ctx.collected.set(plain(n.args[0]).trim(), ctx.currentLabel);
+      ctx.labels.define(plain(n.args[0]).trim());
       return NOTHING;
     },
 
@@ -130,11 +134,9 @@ export const base: Package = {
       if (!ctx.float) {
         return inline(renderInline(n.args[0], ctx));
       }
-      const num = ++ctx.counters[ctx.float];
-      ctx.currentLabel = String(num);
-      const name = ctx.float === 'figure' ? (ctx.japanese ? '図' : 'Figure') : ctx.japanese ? '表' : 'Table';
-      const sep = ctx.japanese ? '　' : ': ';
-      return block(`<div class="caption" data-line="${n.line}">${name}${ctx.japanese ? '' : ' '}${num}${sep}${renderInline(n.args[0], ctx)}</div>`);
+      const num = refStepCounter(ctx, ctx.float);
+      const name = ctx.float === 'figure' ? ctx.locale.figureName : ctx.locale.tableName;
+      return block(`<div class="caption" data-line="${n.line}">${ctx.locale.captionLabel(name, num)}${renderInline(n.args[0], ctx)}</div>`);
     },
 
     LaTeX: { args: 0, render: symbol('L<sup>A</sup>T<sub>E</sub>X') },
@@ -171,7 +173,21 @@ export const base: Package = {
     thispagestyle: ignore,
     setlength: { args: 2, render: ignore },
     addtolength: { args: 2, render: ignore },
-    setcounter: { args: 2, render: ignore },
+    setcounter: {
+      args: 2,
+      render: (n, ctx) => {
+        ctx.counters.set(plain(n.args[0]).trim(), parseInt(plain(n.args[1]), 10) || 0);
+        return NOTHING;
+      },
+    },
+    addtocounter: {
+      args: 2,
+      render: (n, ctx) => {
+        const name = plain(n.args[0]).trim();
+        ctx.counters.set(name, ctx.counters.get(name) + (parseInt(plain(n.args[1]), 10) || 0));
+        return NOTHING;
+      },
+    },
     hyphenation: ignore,
     centering: { args: 0, render: ignore },
     noindent: { args: 0, render: ignore },
@@ -213,7 +229,7 @@ export const base: Package = {
     quote: container('quote'),
     quotation: container('quote'),
     abstract: (n, ctx) =>
-      block(`<div class="abstract" data-line="${n.line}"><div class="abstract-title">Abstract</div>${renderBlocks(n.children, ctx)}</div>`),
+      block(`<div class="abstract" data-line="${n.line}"><div class="abstract-title">${ctx.locale.abstractName}</div>${renderBlocks(n.children, ctx)}</div>`),
     minipage: { args: 1 },
   },
 };

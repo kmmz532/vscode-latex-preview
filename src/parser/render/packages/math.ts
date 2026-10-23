@@ -1,5 +1,6 @@
 import type { Node } from '../../parser';
 import { escapeHtml } from '../text';
+import { refStepCounter } from '../numbering';
 import { block, Ctx, inline, Out, Package } from '../types';
 
 /** 番号付きの数式環境と、KaTeX に渡すときの番号なし版（番号は \tag で自前で振る） */
@@ -17,6 +18,7 @@ const NUMBERED_MATH = new Set(['equation', 'align', 'eqnarray', 'gather', 'multl
 
 /** 数式環境（amsmath 相当）。中身はトークナイザが math ノードとして切り出し、renderMath で描画する */
 export const math: Package = {
+  counters: { equation: {} },
   mathEnvironments: [
     'equation', 'equation*', 'align', 'align*', 'gather', 'gather*',
     'multline', 'multline*', 'eqnarray', 'eqnarray*', 'displaymath', 'math',
@@ -38,10 +40,9 @@ export function renderMath(n: Extract<Node, { kind: 'math' }>, ctx: Ctx): Out {
     const userTag = /\\tag\*?\{([^}]*)\}/.exec(row);
     let tag = '';
     if (userTag) {
-      ctx.currentLabel = userTag[1];
+      ctx.labels.current = userTag[1];
     } else if (numbered && !suppressed) {
-      ctx.currentLabel = String(++ctx.counters.equation);
-      tag = ` \\tag{${ctx.currentLabel}}`;
+      tag = ` \\tag{${refStepCounter(ctx, 'equation')}}`;
     }
     return stripLabels(row.replace(/\\(nonumber|notag)(?![a-zA-Z])/g, ''), ctx) + tag;
   });
@@ -52,7 +53,7 @@ export function renderMath(n: Extract<Node, { kind: 'math' }>, ctx: Ctx): Out {
 /** 数式中の \label{...} を取り除き、直前の番号に対応付ける（KaTeX は \label 非対応） */
 function stripLabels(tex: string, ctx: Ctx): string {
   return tex.replace(/\\label\s*\{([^}]*)\}/g, (_, key: string) => {
-    ctx.collected.set(key.trim(), ctx.currentLabel);
+    ctx.labels.define(key.trim());
     return '';
   });
 }

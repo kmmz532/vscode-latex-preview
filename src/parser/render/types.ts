@@ -1,5 +1,7 @@
 import type { BibEntry } from '../bibtex';
 import type { Node } from '../parser';
+import type { Locale } from './locale';
+import type { CounterDef, Counters, Labels } from './numbering';
 
 export interface RenderOptions {
   showUnknownCommands: boolean;
@@ -34,15 +36,9 @@ export interface Meta {
 export interface Ctx {
   opts: RenderOptions;
   meta: Meta;
-  /** 日本語文書クラス（jsarticle 等）なら「図」「表」、それ以外は Figure / Table */
-  japanese: boolean;
-  counters: { figure: number; table: number; section: number[]; equation: number; listing: number };
-  /** \ref で引く番号（前回の描画パスで集めたもの。前方参照のため 2 回描画する） */
-  labels: Map<string, string>;
-  /** 今回の描画パスで集めた \label */
-  collected: Map<string, string>;
-  /** 直前に振られた番号（LaTeX の \@currentlabel） */
-  currentLabel: string;
+  locale: Locale;
+  counters: Counters;
+  labels: Labels;
   /** 描画中の float 環境（\caption の番号付けに使う） */
   float?: 'figure' | 'table';
   bib: BibState;
@@ -79,6 +75,8 @@ export interface EnvDef {
 export interface Package {
   commands?: Record<string, CommandHandler | CommandDef>;
   environments?: Record<string, EnvHandler | EnvDef>;
+  /** このパッケージが使うカウンタ */
+  counters?: Record<string, CounterDef>;
   /** 中身を数式として KaTeX に渡す環境（描画は math ノードとして行う） */
   mathEnvironments?: string[];
   /** 中身を解釈しない環境（描画は verb ノードとして行う） */

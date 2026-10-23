@@ -98,7 +98,3 @@ export function parseKeyValues(s: string): Record<string, string> {
   return out;
 }
 
-export function today(): string {
-  const d = new Date();
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
-}
