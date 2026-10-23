@@ -11,7 +11,8 @@ LaTeXを簡易プレビューするVSCode拡張機能<br />
 2. エディタ右上のプレビューアイコン、またはコマンドパレットから `LaTeX Preview: Open Preview to the Side` を実行
 3. 編集内容はリアルタイムに反映される
 
-プレビュー右上のボタンで拡大/縮小（`−` / `+`）、等倍（`100%`）、窓幅に合わせる（Fit）を切り替えられる。
+プレビュー右上のボタンで拡大/縮小（`−` / `+`）、等倍（`100%`）、窓幅に合わせる（Fit）、エディタとのスクロール同期のオン/オフ（鎖のアイコン）を切り替えられる。
+プレビューをダブルクリックすると、エディタのその行へ移動する。
 
 ## 対応している記法
 - 数式: `$...$` `\(...\)` `$$...$$` `\[...\]`、`equation` `align` `gather` `multline`（KaTeX で描画）
@@ -19,7 +20,8 @@ LaTeXを簡易プレビューするVSCode拡張機能<br />
 - `\title` `\author` `\date` `\maketitle`
 - 文字装飾: `\textbf` `\textit` `\emph` `\texttt` `\underline` など
 - リスト: `itemize` `enumerate` `description`
-- `figure` / `table` と `\caption`（画像はファイル名の枠で表示）
+- `figure` / `table` と `\caption`
+- 画像: `\includegraphics` でワークスペース内の PNG / JPEG / SVG / GIF / WebP を表示（`width` `height` `scale` `angle`、`\graphicspath` に対応）。EPS / PDF はファイル名の枠で表示
 - 表: `tabular` `tabular*` `tabularx`（`l` `c` `r` `p{幅}`、縦線 `|`、`\hline`、`\cline`、`\multicolumn`、`\multirow`）
 - コード: `verbatim` `Verbatim` `lstlisting`（`caption` / `label` 対応）`minted`、文中の `\verb` / `\lstinline`（色分けはしない）
 - マクロ: `\newcommand` `\renewcommand` `\providecommand` `\def`（引数・オプション引数の既定値に対応。数式中でも使える）
@@ -40,7 +42,8 @@ LaTeXを簡易プレビューするVSCode拡張機能<br />
 
 ## 制限
 - 段落はページをまたいで分割しない
-- 画像の読み込み、`\input` / `\include` は未対応
+- `\input` / `\include` は未対応
+- EPS / PDF の画像は表示できない
 - `\def` の区切り付きパラメータ（`\def\foo#1.{...}` など）は未対応
 - 寸法のデフォルトは各文書クラスの近似値
 - 参考文献の書式は `\bibliographystyle` によらず `plain` に近い簡易的なもの

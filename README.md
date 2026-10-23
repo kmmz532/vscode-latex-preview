@@ -11,7 +11,8 @@ Unlike other LaTeX extensions, it also works in VS Code for the Web (vscode.dev 
 2. Click the preview icon at the top right of the editor, or run `LaTeX Preview: Open Preview to the Side` from the Command Palette
 3. The preview updates as you type
 
-Use the buttons at the top right of the preview to zoom out / in (`−` / `+`), show at actual size (`100%`), or fit to the window (Fit).
+Use the buttons at the top right of the preview to zoom out / in (`−` / `+`), show at actual size (`100%`), fit to the window (Fit), or turn scroll sync with the editor on / off (link icon).
+Double-click on the preview to jump to that line in the editor.
 
 ## Supported syntax
 - Math: `$...$` `\(...\)` `$$...$$` `\[...\]`, `equation` `align` `gather` `multline` (rendered with KaTeX)
@@ -19,7 +20,8 @@ Use the buttons at the top right of the preview to zoom out / in (`−` / `+`), 
 - `\title` `\author` `\date` `\maketitle`
 - Text styles: `\textbf` `\textit` `\emph` `\texttt` `\underline`, etc.
 - Lists: `itemize` `enumerate` `description`
-- `figure` / `table` with `\caption` (images are shown as a placeholder with the file name)
+- `figure` / `table` with `\caption`
+- Images: `\includegraphics` shows PNG / JPEG / SVG / GIF / WebP from the workspace (`width` / `height` / `scale` / `angle`, `\graphicspath`). EPS / PDF are shown as a placeholder with the file name
 - Tables: `tabular` `tabular*` `tabularx` (`l` `c` `r` `p{width}`, vertical rules `|`, `\hline`, `\cline`, `\multicolumn`, `\multirow`)
 - Code: `verbatim` `Verbatim` `lstlisting` (with `caption` / `label`) `minted`, inline `\verb` / `\lstinline` (no syntax highlighting)
 - Macros: `\newcommand` `\renewcommand` `\providecommand` `\def` (with arguments and default optional arguments; also usable inside math)
@@ -40,7 +42,8 @@ Unsupported commands do not cause errors; they are shown as dimmed source text.
 
 ## Limitations
 - Paragraphs are not split across pages
-- Image loading and `\input` / `\include` are not supported
+- `\input` / `\include` are not supported
+- EPS / PDF images cannot be displayed
 - `\def` with delimited parameters (e.g. `\def\foo#1.{...}`) is not supported
 - Default dimensions are approximations of each document class
 - Bibliography entries are formatted in a simplified `plain`-like style regardless of `\bibliographystyle`

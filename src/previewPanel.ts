@@ -19,6 +19,8 @@ export class PreviewPanel {
   private readonly disposables: vscode.Disposable[] = [];
   private timer: ReturnType<typeof setTimeout> | undefined;
   private version = 0;
+  /** プレビュー起点でエディタを動かした直後は、その反動のスクロール通知を無視する */
+  private ignoreEditorScrollUntil = 0;
   /** 参照中の .bib（変更を監視する対象） */
   private readonly bibUris = new Set<string>();
   /** 画像の data: URI（URI → 更新日時と中身） */
@@ -66,10 +68,41 @@ export class PreviewPanel {
         }
       })
     );
-    // Webview のスクリプトが読み込まれてから初回描画する
+    // エディタのスクロールをプレビューに伝える（同期の on/off は Webview 側で判断）
+    this.disposables.push(
+      vscode.window.onDidChangeTextEditorVisibleRanges((e) => {
+        if (e.textEditor.document === this.document && Date.now() > this.ignoreEditorScrollUntil && e.visibleRanges.length) {
+          void this.panel.webview.postMessage({ type: 'scrollTo', line: e.visibleRanges[0].start.line });
+        }
+      })
+    );
     this.panel.webview.onDidReceiveMessage((msg) => {
-      if (msg?.type === 'ready') {
-        this.update();
+      switch (msg?.type) {
+        case 'ready':
+          // Webview のスクリプトが読み込まれてから初回描画する
+          void this.update();
+          break;
+        case 'reveal': {
+          // プレビューのスクロールにエディタを追従させる
+          const editor = this.editor();
+          if (editor && typeof msg.line === 'number') {
+            this.ignoreEditorScrollUntil = Date.now() + 300;
+            const pos = new vscode.Position(Math.max(0, msg.line), 0);
+            editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.AtTop);
+          }
+          break;
+        }
+        case 'open': {
+          // ダブルクリックした段落の行へ移動
+          if (typeof msg.line === 'number') {
+            const pos = new vscode.Position(Math.max(0, msg.line), 0);
+            void vscode.window.showTextDocument(this.document, {
+              viewColumn: this.editor()?.viewColumn ?? vscode.ViewColumn.One,
+              selection: new vscode.Range(pos, pos),
+            });
+          }
+          break;
+        }
       }
     }, null, this.disposables);
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
@@ -100,7 +133,13 @@ export class PreviewPanel {
     } catch (e) {
       result = { html: `<pre class="error">${String(e)}</pre>`, macros: {} };
     }
-    void this.panel.webview.postMessage({ type: 'update', ...result });
+    // 描画後にエディタの表示位置へ合わせる
+    const editor = this.editor();
+    void this.panel.webview.postMessage({ type: 'update', ...result, line: editor?.visibleRanges[0]?.start.line });
+  }
+
+  private editor(): vscode.TextEditor | undefined {
+    return vscode.window.visibleTextEditors.find((e) => e.document === this.document);
   }
 
   /**

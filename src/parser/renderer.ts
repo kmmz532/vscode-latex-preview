@@ -539,6 +539,12 @@ const COMMANDS: Record<string, CommandHandler> = {
   ',': symbol(' '),
   ';': symbol(' '),
   quad: symbol(' '),
+  // 伸びる空白は幅を再現できないので全角分の空きで代用
+  hfill: symbol(' '),
+  hfil: symbol(' '),
+  hss: ignore,
+  vfill: ignore,
+  vfil: ignore,
   qquad: symbol('  '),
   ldots: symbol('…'),
   dots: symbol('…'),

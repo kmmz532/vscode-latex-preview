@@ -10,11 +10,13 @@ interface ViewState {
   /** fit: 窓に収まるよう自動縮小 / manual: zoom の値で固定 */
   mode: 'fit' | 'manual';
   zoom: number;
+  /** エディタとスクロールを同期するか */
+  sync: boolean;
 }
 
 const vscode = acquireVsCodeApi();
 const content = document.getElementById('content')!;
-let state: ViewState = vscode.getState() ?? { mode: 'fit', zoom: 1 };
+let state: ViewState = { mode: 'fit', zoom: 1, sync: true, ...vscode.getState() };
 
 const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 
@@ -60,12 +62,18 @@ const fit = button('', 'Fit to window', () => setState({ mode: 'fit', zoom: stat
 fit.innerHTML =
   '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 2h1.5v12H1zM13.5 2H15v12h-1.5z"/>' +
   '<path d="M4 8l2.5-2.5v1.75h3V5.5L12 8l-2.5 2.5V8.75h-3v1.75z"/></svg>';
+const syncButton = button('', 'Sync scroll with editor', () => setState({ sync: !state.sync }));
+// 鎖のアイコン（エディタと連動）
+syncButton.innerHTML =
+  '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.9 9.1a.75.75 0 0 1 0-1.06l1.13-1.13a.75.75 0 1 1 1.06 1.06L7.96 9.1a.75.75 0 0 1-1.06 0z"/>' +
+  '<path d="M4.4 8.5 3.3 9.6a2.25 2.25 0 0 0 3.18 3.18l1.1-1.1 1.07 1.06-1.1 1.1A3.75 3.75 0 0 1 2.24 8.54l1.1-1.1zM11.6 7.5l1.1-1.1a2.25 2.25 0 0 0-3.18-3.18l-1.1 1.1-1.07-1.06 1.1-1.1a3.75 3.75 0 0 1 5.3 5.3l-1.1 1.1z"/></svg>';
 document.body.appendChild(toolbar);
 
-function setState(next: ViewState) {
-  state = next;
+function setState(next: Partial<ViewState>) {
+  state = { ...state, ...next };
   vscode.setState(state);
   applyZoom();
+  syncButton.classList.toggle('active', state.sync);
 }
 
 function stepZoom(dir: 1 | -1) {
@@ -160,13 +168,89 @@ function overflows(body: HTMLElement, two: boolean): boolean {
   return two ? body.scrollWidth > body.clientWidth + 1 : body.scrollHeight > body.clientHeight + 1;
 }
 
+// ---- スクロール同期 ----
+
+/** プログラムからスクロールした直後は、その scroll イベントをエディタへ送り返さない */
+let ignoreScrollUntil = 0;
+
+/** data-line を持つ要素（文書順） */
+function lineElements(): { line: number; el: HTMLElement }[] {
+  return Array.from(content.querySelectorAll<HTMLElement>('[data-line]'))
+    .map((el) => ({ line: parseInt(el.dataset.line ?? '', 10), el }))
+    .filter((x) => !isNaN(x.line));
+}
+
+/** エディタの行に対応する要素までスクロールする */
+function scrollToLine(line: number) {
+  const items = lineElements();
+  let target: HTMLElement | undefined;
+  for (const it of items) {
+    if (it.line > line) {
+      break;
+    }
+    target = it.el;
+  }
+  ignoreScrollUntil = Date.now() + 200;
+  if (!target) {
+    window.scrollTo(0, 0);
+    return;
+  }
+  window.scrollTo(0, window.scrollY + target.getBoundingClientRect().top - 8);
+}
+
+/** 画面上端にある要素の行。2 段組では上端をまたぐ要素のうち最も前の行 */
+function topLine(): number | undefined {
+  let best: number | undefined;
+  let firstBelow: number | undefined;
+  for (const { line, el } of lineElements()) {
+    const r = el.getBoundingClientRect();
+    if (r.top <= 8 && r.bottom > 8) {
+      best = best === undefined ? line : Math.min(best, line);
+    } else if (r.top > 8 && firstBelow === undefined) {
+      firstBelow = line;
+    }
+  }
+  return best ?? firstBelow;
+}
+
+let scrollTimer: ReturnType<typeof setTimeout> | undefined;
+window.addEventListener('scroll', () => {
+  if (!state.sync || Date.now() < ignoreScrollUntil) {
+    return;
+  }
+  clearTimeout(scrollTimer);
+  scrollTimer = setTimeout(() => {
+    const line = topLine();
+    if (line !== undefined) {
+      vscode.postMessage({ type: 'reveal', line });
+    }
+  }, 50);
+});
+
+// ダブルクリックでエディタのその行へ
+content.addEventListener('dblclick', (e) => {
+  const el = (e.target as HTMLElement).closest<HTMLElement>('[data-line]');
+  if (el) {
+    vscode.postMessage({ type: 'open', line: parseInt(el.dataset.line ?? '0', 10) });
+  }
+});
+
 // ---- メッセージ ----
 
-window.addEventListener('message', (event) => {
+let updateVersion = 0;
+
+window.addEventListener('message', async (event) => {
   const msg = event.data;
   if (msg?.type === 'update') {
+    const version = ++updateVersion;
+    const scrollY = window.scrollY;
     content.innerHTML = msg.html;
     renderMath(content, msg.macros ?? {});
+    // 画像の大きさが決まってからページ分割する
+    await Promise.all(Array.from(content.querySelectorAll('img')).map((img) => img.decode().catch(() => undefined)));
+    if (version !== updateVersion) {
+      return;
+    }
     // ページ分割は等倍で測る
     const zoom = content.style.zoom;
     content.style.zoom = '1';
@@ -174,8 +258,17 @@ window.addEventListener('message', (event) => {
     content.style.zoom = zoom;
     // 段組みの有無で最小幅が変わるので再計算
     applyZoom();
+    // 同期中はエディタの位置へ、そうでなければ元のスクロール位置を保つ
+    if (state.sync && typeof msg.line === 'number') {
+      scrollToLine(msg.line);
+    } else {
+      ignoreScrollUntil = Date.now() + 200;
+      window.scrollTo(0, scrollY);
+    }
+  } else if (msg?.type === 'scrollTo' && state.sync && typeof msg.line === 'number') {
+    scrollToLine(msg.line);
   }
 });
 
-applyZoom();
+setState({});
 vscode.postMessage({ type: 'ready' });

@@ -204,7 +204,13 @@ export function tokenize(src: string): Token[] {
         advance(i + m[0].length);
         continue;
       }
-      pushText(' ');
+      // 改行から始まるテキストは次の行のものとして扱う（見出し直後の段落の行番号がずれないように）
+      if (!text) {
+        textLine = line + 1;
+        text = ' ';
+      } else {
+        text += ' ';
+      }
       line++;
       i++;
       continue;
