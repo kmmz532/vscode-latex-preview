@@ -1,0 +1,19 @@
+<div class="doc en paged" style="--fs:10pt;--lh:1.2;--indent:15pt;--textwidth:345pt;--textheight:514.0pt;--colsep:10pt">
+<p data-line="7">[a|b] [x,y|z]</p>
+<p data-line="9">&#60;hello world&#62; after</p>
+<p data-line="11">(abc)def</p>
+<p data-line="13">
+<strong>some <em>text</em>
+</strong>done</p>
+<p data-line="15">key=value rest</p>
+<p data-line="17">
+<span class="unknown">\pair</span>no match</p>
+</div>
+
+{
+  "\\pair": "[#1|#2]",
+  "\\upto": "<#1>",
+  "\\word": "(#1)",
+  "\\tail": "\\textbf {#1}",
+  "\\mixed": "#1=#2"
+}

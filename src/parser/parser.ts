@@ -24,6 +24,17 @@ interface Macro {
   /** 第 1 引数がオプション引数のときの既定値 */
   defaultOpt?: Token[];
   body: Token[];
+  /**
+   * \def の区切り付きパラメータ。[0] は #1 の前、[i] は #i の後に来るべきトークン列
+   * （テキストは 1 文字ずつ、空白は ' ' 1 つにまとめる）。undefined なら区切りなし
+   */
+  delims?: Token[][];
+}
+
+/** トークン列上の位置（テキストトークンは文字単位で指す） */
+interface Cursor {
+  p: number;
+  off: number;
 }
 
 /** マクロ定義を行うコマンド */
@@ -121,8 +132,7 @@ class Parser {
           this.defineDef();
           return undefined;
         }
-        if (this.macros.has(t.name) && this.expansions < MAX_EXPANSIONS) {
-          this.expand(this.macros.get(t.name)!, t.line);
+        if (this.macros.has(t.name) && this.expansions < MAX_EXPANSIONS && this.expand(this.macros.get(t.name)!, t.line)) {
           return undefined;
         }
         if ((t.name === 'input' || t.name === 'include') && this.insertInput(t.name, t.line)) {
@@ -261,7 +271,7 @@ class Parser {
     this.macros.set(name, { nargs: n, defaultOpt: def !== undefined ? tokenize(def, this.syntax) : undefined, body });
   }
 
-  /** \def\name#1#2{body}（区切り付きパラメータは非対応） */
+  /** \def\name#1#2{body} / \def\name#1.#2\end{body}（区切り付きパラメータ） */
   private defineDef() {
     this.skipWhitespace();
     const t = this.peek();
@@ -269,13 +279,48 @@ class Parser {
       return;
     }
     this.pos++;
-    let nargs = 0;
-    const params = this.peek();
-    if (params?.type === 'text' && /^(\s*#\d)+\s*$/.test(params.value)) {
-      nargs = (params.value.match(/#\d/g) ?? []).length;
+    // パラメータテキストは本体の { まで
+    const units: Token[] = [];
+    while (this.pos < this.tokens.length) {
+      const x = this.tokens[this.pos];
+      if (x.type === 'lbrace' || x.type === 'parbreak') {
+        break;
+      }
+      if (x.type === 'text') {
+        for (const ch of x.value) {
+          units.push({ ...x, value: ch });
+        }
+      } else {
+        units.push(x);
+      }
       this.pos++;
     }
-    this.macros.set(t.name, { nargs, body: this.readRawArg() });
+    const delims: Token[][] = [[]];
+    for (let i = 0; i < units.length; i++) {
+      const u = units[i];
+      const next = units[i + 1];
+      if (u.type === 'text' && u.value === '#' && next?.type === 'text' && /\d/.test(next.value)) {
+        delims.push([]);
+        i++;
+        continue;
+      }
+      const cur = delims[delims.length - 1];
+      if (u.type === 'text' && /\s/.test(u.value)) {
+        // 空白は 1 つにまとめ、制御綴の直後と \name の直後のものは捨てる
+        const last = cur[cur.length - 1];
+        if (last ? last.type === 'command' || (last.type === 'text' && last.value === ' ') : delims.length === 1) {
+          continue;
+        }
+        cur.push({ ...u, value: ' ' });
+        continue;
+      }
+      cur.push(u);
+    }
+    this.macros.set(t.name, {
+      nargs: delims.length - 1,
+      body: this.readRawArg(),
+      delims: delims.some((d) => d.length > 0) ? delims : undefined,
+    });
   }
 
   private readMacroName(): string | undefined {
@@ -332,17 +377,27 @@ class Parser {
     }
   }
 
-  /** マクロを展開し、結果のトークンを現在位置に差し込む */
-  private expand(m: Macro, line: number) {
+  /**
+   * マクロを展開し、結果のトークンを現在位置に差し込む。
+   * 区切り付きパラメータが定義どおりに現れなければ何もせず false
+   */
+  private expand(m: Macro, line: number): boolean {
+    let args: Token[][] | undefined = [];
+    if (m.delims) {
+      args = this.readDelimitedArgs(m.delims);
+      if (!args) {
+        return false;
+      }
+    } else {
+      if (m.defaultOpt) {
+        const opt = this.readOpt();
+        args.push(opt !== undefined ? tokenize(opt, this.syntax) : m.defaultOpt);
+      }
+      while (args.length < m.nargs) {
+        args.push(this.readRawArg());
+      }
+    }
     this.expansions++;
-    const args: Token[][] = [];
-    if (m.defaultOpt) {
-      const opt = this.readOpt();
-      args.push(opt !== undefined ? tokenize(opt, this.syntax) : m.defaultOpt);
-    }
-    while (args.length < m.nargs) {
-      args.push(this.readRawArg());
-    }
     const out: Token[] = [];
     for (const t of m.body) {
       if (t.type !== 'text' || !/#\d/.test(t.value)) {
@@ -359,6 +414,143 @@ class Parser {
       }
     }
     this.tokens.splice(this.pos, 0, ...out);
+    return true;
+  }
+
+  /** 区切り付きパラメータの引数を読む。合わなければ位置を動かさず undefined */
+  private readDelimitedArgs(delims: Token[][]): Token[][] | undefined {
+    const c: Cursor = { p: this.pos, off: 0 };
+    // 制御綴の後の空白は読み飛ばす
+    this.skipSpaceUnits(c);
+    const head = this.matchDelim(c, delims[0]);
+    if (!head) {
+      return undefined;
+    }
+    Object.assign(c, head);
+    const args: Token[][] = [];
+    for (let i = 1; i < delims.length; i++) {
+      const a = delims[i].length > 0 ? this.readUntilDelim(c, delims[i]) : this.readUndelimited(c);
+      if (!a) {
+        return undefined;
+      }
+      args.push(a);
+    }
+    const t = this.tokens[c.p];
+    if (c.off > 0 && t?.type === 'text') {
+      this.tokens[c.p] = { ...t, value: t.value.slice(c.off) };
+    }
+    this.pos = c.p;
+    return args;
+  }
+
+  private unitAt(c: Cursor): Token | undefined {
+    let t = this.tokens[c.p];
+    while (t?.type === 'text' && c.off >= t.value.length) {
+      c.p++;
+      c.off = 0;
+      t = this.tokens[c.p];
+    }
+    return t?.type === 'text' ? { ...t, value: t.value[c.off] } : t;
+  }
+
+  private advance(c: Cursor) {
+    const t = this.tokens[c.p];
+    if (t?.type === 'text' && c.off + 1 < t.value.length) {
+      c.off++;
+    } else {
+      c.p++;
+      c.off = 0;
+    }
+  }
+
+  private skipSpaceUnits(c: Cursor) {
+    let u: Token | undefined;
+    while ((u = this.unitAt(c)) && u.type === 'text' && /\s/.test(u.value)) {
+      this.advance(c);
+    }
+  }
+
+  /** c の位置から区切りが続いていれば、その直後の位置 */
+  private matchDelim(c: Cursor, delim: Token[]): Cursor | undefined {
+    const d = { ...c };
+    for (const u of delim) {
+      const x = this.unitAt(d);
+      if (!x) {
+        return undefined;
+      }
+      if (u.type === 'text' && u.value === ' ') {
+        // 区切りの空白は 1 文字以上の空白に合う
+        if (x.type !== 'text' || !/\s/.test(x.value)) {
+          return undefined;
+        }
+        this.skipSpaceUnits(d);
+        continue;
+      }
+      const same = u.type === 'text' ? x.type === 'text' && x.value === u.value : u.type === 'command' && x.type === 'command' && x.name === u.name;
+      if (!same) {
+        return undefined;
+      }
+      this.advance(d);
+      if (u.type === 'command') {
+        this.skipSpaceUnits(d);
+      }
+    }
+    return d;
+  }
+
+  /** 波括弧の外で区切りが現れるまで読む。全体が {...} 1 つなら外側の括弧を外す */
+  private readUntilDelim(c: Cursor, delim: Token[]): Token[] | undefined {
+    const out: Token[] = [];
+    let depth = 0;
+    for (;;) {
+      if (depth === 0) {
+        const end = this.matchDelim(c, delim);
+        if (end) {
+          Object.assign(c, end);
+          break;
+        }
+      }
+      const x = this.unitAt(c);
+      // 段落を跨ぐ引数は TeX でもエラーになる
+      if (!x || x.type === 'parbreak' || (x.type === 'rbrace' && depth === 0)) {
+        return undefined;
+      }
+      if (x.type === 'lbrace') {
+        depth++;
+      } else if (x.type === 'rbrace') {
+        depth--;
+      }
+      pushUnit(out, x);
+      this.advance(c);
+    }
+    return isSingleGroup(out) ? out.slice(1, -1) : out;
+  }
+
+  /** 区切りのないパラメータ：空白を飛ばして {...} の中身か 1 文字（トークン 1 個） */
+  private readUndelimited(c: Cursor): Token[] {
+    this.skipSpaceUnits(c);
+    const x = this.unitAt(c);
+    if (!x) {
+      return [];
+    }
+    this.advance(c);
+    if (x.type !== 'lbrace') {
+      return [x];
+    }
+    const out: Token[] = [];
+    let depth = 0;
+    let y: Token | undefined;
+    while ((y = this.unitAt(c))) {
+      this.advance(c);
+      if (y.type === 'rbrace' && depth-- === 0) {
+        break;
+      }
+      if (y.type === 'lbrace') {
+        depth++;
+      }
+      pushUnit(out, y);
+    }
+    return out;
   }
 
   /**
@@ -418,6 +610,33 @@ class Parser {
     const tx = this.tokens[this.pos + 2];
     return lb?.type === 'lbrace' && tx?.type === 'text' ? tx.value.trim() : '';
   }
+}
+
+/** 1 文字ずつ読んだテキストを隣のテキストトークンにつなげて追加する */
+function pushUnit(out: Token[], u: Token) {
+  const last = out[out.length - 1];
+  if (u.type === 'text' && last?.type === 'text') {
+    out[out.length - 1] = { ...last, value: last.value + u.value };
+  } else {
+    out.push(u);
+  }
+}
+
+/** トークン列全体が {...} 1 つか */
+function isSingleGroup(tokens: Token[]): boolean {
+  if (tokens[0]?.type !== 'lbrace' || tokens[tokens.length - 1]?.type !== 'rbrace') {
+    return false;
+  }
+  let depth = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.type === 'lbrace') {
+      depth++;
+    } else if (t.type === 'rbrace' && --depth === 0 && i < tokens.length - 1) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** トークン列を TeX ソースに戻す（KaTeX のマクロ定義用） */

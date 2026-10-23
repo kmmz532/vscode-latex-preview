@@ -1,0 +1,19 @@
+\documentclass{article}
+\def\pair(#1,#2){[#1|#2]}
+\def\upto#1.{<#1>}
+\def\word#1 {(#1)}
+\def\tail#1\stop{\textbf{#1}}
+\def\mixed#1:#2{#1=#2}
+\begin{document}
+\pair(a,b) \pair({x,y},z)
+
+\upto hello world. after
+
+\word abc def
+
+\tail some \emph{text}\stop done
+
+\mixed key:{value} rest
+
+\pair no match
+\end{document}
