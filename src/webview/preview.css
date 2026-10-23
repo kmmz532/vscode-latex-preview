@@ -1,0 +1,187 @@
+body {
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-editor-background);
+  padding: 24px 24px 48px;
+  margin: 0;
+}
+
+/*
+ * 紙面。寸法（--fs 等）は renderer が文書クラスとプリアンブルから算出して style 属性で渡す。
+ * 欧文は KaTeX 同梱の KaTeX_Main（Computer Modern 系）、和文は OS の明朝・ゴシックを使う
+ */
+/* jsarticle は和文を欧文の 0.924961 倍で組むので、和文フォントだけ縮める */
+@font-face {
+  font-family: 'LP Mincho';
+  src: local('Yu Mincho'), local('YuMincho'), local('Hiragino Mincho ProN'), local('Noto Serif JP'),
+    local('Noto Serif CJK JP'), local('MS Mincho');
+  size-adjust: 92.5%;
+}
+@font-face {
+  font-family: 'LP Gothic';
+  src: local('Yu Gothic'), local('YuGothic'), local('Hiragino Sans'), local('Noto Sans JP'),
+    local('Noto Sans CJK JP'), local('Meiryo');
+  size-adjust: 92.5%;
+}
+@font-face {
+  font-family: 'LP Gothic';
+  font-weight: bold;
+  src: local('Yu Gothic Bold'), local('YuGothic-Bold'), local('Hiragino Sans W6'), local('Noto Sans JP Bold'),
+    local('Noto Sans CJK JP Bold'), local('Meiryo Bold');
+  size-adjust: 92.5%;
+}
+
+.doc {
+  --serif: KaTeX_Main, 'Latin Modern Roman', 'Times New Roman', serif;
+  --mincho: 'LP Mincho', serif;
+  --gothic: 'LP Gothic', sans-serif;
+  width: var(--textwidth);
+  margin: 0 auto;
+  font-family: var(--serif);
+  /* 本文 1 行の送り（jsarticle の \Cvs 相当） */
+  --cvs: calc(var(--fs) * var(--lh));
+  font-size: var(--fs);
+  line-height: var(--lh);
+  /* LaTeX と同じく両端揃え。和文の禁則は strict 相当 */
+  text-align: justify;
+  line-break: strict;
+  overflow-wrap: anywhere;
+}
+.doc :is(h1, h2, h3, h4, h5, h6, .maketitle, .center, .caption, .graphics) { text-align: inherit; }
+.doc :is(.maketitle, .center, .float) { text-align: center; }
+.doc.ja {
+  font-family: KaTeX_Main, var(--mincho);
+  /* 和欧文間の空き（pTeX の xkanjiskip 相当）。未対応ブラウザでは無視される */
+  text-autospace: normal;
+}
+
+.twocolumn { column-count: 2; column-gap: var(--colsep); }
+.twocolumn > :is(.maketitle, .colspan) { column-span: all; }
+
+/*
+ * ページ。preview.ts が \textheight ごとに区切り、2 段組は左の段から順に埋める（column-fill: auto）。
+ * 3 段目にあふれたら次のページへ送る判定に使うため、ページ内は overflow: hidden
+ */
+.page {
+  height: var(--textheight);
+  overflow: hidden;
+  contain: strict;
+  width: var(--textwidth);
+  position: relative;
+}
+/* ページ境界 */
+.page + .page { margin-top: 2.5em; }
+.page > .twocolumn { height: 100%; column-fill: auto; }
+.twocolumn > :first-child { margin-top: 0; }
+.twocolumn h2, .twocolumn h3, .twocolumn h4 { break-after: avoid; }
+.twocolumn .math[data-display='1'] { break-inside: avoid; }
+
+/* 段落間は空けず（\parskip=0）、先頭を \parindent 下げる */
+p { margin: 0; text-indent: var(--indent); }
+p.noindent,
+li > p, dd > p, .float p, .center p, .flushleft p, .flushright p, .maketitle p { text-indent: 0; }
+/* article 系は見出し直後の段落を字下げしない（jsarticle は字下げする） */
+.doc.en :is(h2, h3, h4) + p { text-indent: 0; }
+
+/* 見出し：section=\Large, subsection=\large, subsubsection=\normalsize。jsarticle はゴシック */
+h1, h2, h3, h4, h5, h6 { font-weight: bold; line-height: 1.3; margin: 1.2em 0 0.6em; }
+h1 { font-size: 1.728em; }
+h2 { font-size: 1.44em; }
+h3 { font-size: 1.2em; }
+h4, h5, h6 { font-size: 1em; }
+.doc.ja :is(h1, h2, h3, h4, h5, h6) { font-family: KaTeX_SansSerif, var(--gothic); }
+/* jsarticle は section=\large、subsection 以下は \normalsize。前に 1 行、後に 0.5 行空ける */
+.doc.ja h2 { font-size: 1.2em; }
+.doc.ja h3 { font-size: 1em; }
+.doc.ja :is(h2, h3, h4) { margin: var(--cvs) 0 calc(0.5 * var(--cvs)); line-height: var(--cvs); }
+.secnum { margin-right: 1em; }
+
+/* \maketitle：title=\LARGE, author/date=\large */
+/* \@maketitle の \vskip（2em / 1.5em / 1em / 1.5em。em は本文サイズ基準） */
+.maketitle { text-align: center; margin: 0; padding: calc(2 * var(--fs)) 0 calc(1.5 * var(--fs)); }
+.maketitle .title { font-size: 1.728em; line-height: 1.25; }
+.maketitle .author, .maketitle .date { font-size: 1.2em; line-height: 1.25; }
+.maketitle .author { margin-top: calc(1.5 * var(--fs)); }
+.maketitle .date { margin-top: var(--fs); }
+.and::before { content: '\3000'; }
+
+.math[data-display='1'] { margin: 1em 0; overflow-x: auto; overflow-y: hidden; }
+.math-error { color: var(--vscode-errorForeground, #f44); font-family: monospace; }
+
+.unknown, .unknown-env > .env-name {
+  color: var(--vscode-descriptionForeground, #888);
+  font-family: var(--vscode-editor-font-family, monospace), monospace;
+  font-size: 0.85em;
+}
+.unknown-env { border-left: 2px solid var(--vscode-panel-border, #8884); padding-left: 0.8em; margin: 1em 0; }
+
+.cite, .ref { color: var(--vscode-textLink-foreground); }
+.footnote { font-size: 0.8em; vertical-align: super; color: var(--vscode-descriptionForeground); }
+.footnote::before { content: '('; }
+.footnote::after { content: ')'; }
+.bibliography { margin-top: 2em; color: var(--vscode-descriptionForeground); font-style: italic; }
+
+.float { margin: 1.5em 0; text-align: center; break-inside: avoid; }
+.twocolumn > .float.span { column-span: all; }
+.float > p { margin: 0.4em 0; }
+.caption { margin-top: 0.5em; font-size: 0.95em; }
+.graphics {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 6em;
+  margin: 0 auto;
+  max-width: 100%;
+  border: 1px dashed var(--vscode-panel-border, #8886);
+  border-radius: 4px;
+  color: var(--vscode-descriptionForeground, #888);
+  font-family: var(--vscode-editor-font-family, monospace), monospace;
+  font-size: 0.85em;
+  word-break: break-all;
+}
+
+.center { text-align: center; }
+.flushright { text-align: right; }
+.quote { margin: 1em 2em; }
+.abstract { margin: 1.5em 3em; font-size: 0.95em; }
+.abstract-title { font-weight: bold; text-align: center; }
+.sc { font-variant: small-caps; }
+.sf { font-family: KaTeX_SansSerif, var(--gothic); }
+
+li.custom { list-style: none; }
+.item-label { font-weight: bold; }
+dt { font-weight: bold; }
+dd p, li p { margin: 0.2em 0; }
+code { font-family: KaTeX_Typewriter, var(--gothic), monospace; }
+.error { color: var(--vscode-errorForeground, #f44); }
+
+.toolbar {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 4px;
+  background: var(--vscode-editorWidget-background, #8882);
+  border: 1px solid var(--vscode-editorWidget-border, #8884);
+  font-family: var(--vscode-font-family, sans-serif);
+  font-size: 12px;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+.toolbar:hover { opacity: 1; }
+.toolbar button {
+  min-width: 26px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  font: inherit;
+  cursor: pointer;
+}
+.toolbar button svg { display: block; width: 16px; height: 16px; margin: 0 auto; fill: currentColor; }
+.toolbar button:hover { background: var(--vscode-toolbar-hoverBackground, #8883); }
+.toolbar button.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+.toolbar .zoom-label { min-width: 40px; text-align: center; align-self: center; }

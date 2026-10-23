@@ -1,0 +1,86 @@
+{
+  "name": "latex-preview",
+  "displayName": "LaTeX Preview",
+  "description": "Lightweight LaTeX preview that also works in VS Code for the Web",
+  "version": "0.0.1",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:latex"
+  ],
+  "browser": "./dist/web/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "latex",
+        "aliases": [
+          "LaTeX",
+          "latex"
+        ],
+        "extensions": [
+          ".tex",
+          ".ltx"
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "LaTeX Preview",
+      "properties": {
+        "latexPreview.debounceMs": {
+          "type": "number",
+          "default": 200,
+          "description": "Delay in milliseconds before the preview updates after an edit."
+        },
+        "latexPreview.showUnknownCommands": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show unsupported commands as dimmed source text."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "latexPreview.openPreview",
+        "title": "Open Preview",
+        "category": "LaTeX Preview",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "latexPreview.openPreviewToSide",
+        "title": "Open Preview to the Side",
+        "category": "LaTeX Preview",
+        "icon": "$(open-preview)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "latexPreview.openPreviewToSide",
+          "when": "resourceLangId == latex",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile-web": "node esbuild.mjs",
+    "watch-web": "node esbuild.mjs --watch",
+    "package-web": "node esbuild.mjs --production",
+    "run-in-browser": "node scripts/run-in-browser.mjs"
+  },
+  "devDependencies": {
+    "@types/katex": "^0.16.8",
+    "@types/vscode": "^1.90.0",
+    "@vscode/test-web": "^0.0.81",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "katex": "^0.19.0"
+  }
+}
