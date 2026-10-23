@@ -83,7 +83,11 @@ li > p, dd > p, .float p, .center p, .flushleft p, .flushright p, .maketitle p {
 .doc.en :is(h2, h3, h4) + p { text-indent: 0; }
 
 /* 見出し：section=\Large, subsection=\large, subsubsection=\normalsize。jsarticle はゴシック */
-h1, h2, h3, h4, h5, h6 { font-weight: bold; line-height: 1.3; margin: 1.2em 0 0.6em; }
+/*
+ * 見出しの前の空きは margin ではなく padding で取る。
+ * margin だと 2 段組の段の先頭でブラウザが捨ててしまい、タイトル直後の左の段とで見出しの高さがそろわない
+ */
+h1, h2, h3, h4, h5, h6 { font-weight: bold; line-height: 1.3; margin: 0 0 0.6em; padding-top: 1.2em; }
 h1 { font-size: 1.728em; }
 h2 { font-size: 1.44em; }
 h3 { font-size: 1.2em; }
@@ -92,7 +96,7 @@ h4, h5, h6 { font-size: 1em; }
 /* jsarticle は section=\large、subsection 以下は \normalsize。前に 1 行、後に 0.5 行空ける */
 .doc.ja h2 { font-size: 1.2em; }
 .doc.ja h3 { font-size: 1em; }
-.doc.ja :is(h2, h3, h4) { margin: var(--cvs) 0 calc(0.5 * var(--cvs)); line-height: var(--cvs); }
+.doc.ja :is(h2, h3, h4) { margin: 0 0 calc(0.5 * var(--cvs)); padding-top: var(--cvs); line-height: var(--cvs); }
 .secnum { margin-right: 1em; }
 
 /* \maketitle：title=\LARGE, author/date=\large */
