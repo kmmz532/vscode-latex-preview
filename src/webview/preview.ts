@@ -21,23 +21,45 @@ let state: ViewState = { mode: 'fit', zoom: 1, sync: true, ...vscode.getState() 
 
 const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 
+/**
+ * 前回の更新で描画した数式（表示形式 + TeX → KaTeX の HTML）。
+ * 編集で変わる数式はわずかなので、変わっていないものは KaTeX を呼ばずに使い回す。マクロが変わったら捨てる
+ */
+let mathCache = new Map<string, string>();
+let mathCacheMacros = '';
+
 function renderMath(root: HTMLElement, macros: Record<string, string>) {
+  const macrosKey = JSON.stringify(macros);
+  const prev = macrosKey === mathCacheMacros ? mathCache : new Map<string, string>();
+  // 今回使った数式だけを残す（キャッシュが際限なく増えないように）
+  const next = new Map<string, string>();
   root.querySelectorAll<HTMLElement>('.math').forEach((el) => {
     const tex = el.textContent ?? '';
+    const display = el.dataset.display === '1';
+    const key = (display ? 'D' : 'I') + tex;
+    const cached = prev.get(key) ?? next.get(key);
+    if (cached !== undefined) {
+      el.innerHTML = cached;
+      next.set(key, cached);
+      return;
+    }
     try {
       katex.render(tex, el, {
-        displayMode: el.dataset.display === '1',
+        displayMode: display,
         throwOnError: false,
         strict: 'ignore',
         // \gdef 等で書き換えられても次の数式に影響しないよう毎回コピーする
         macros: { ...macros },
       });
+      next.set(key, el.innerHTML);
     } catch (e) {
       el.classList.add('math-error');
       el.textContent = tex;
       el.title = String(e);
     }
   });
+  mathCache = next;
+  mathCacheMacros = macrosKey;
 }
 
 // ---- ズーム ----
