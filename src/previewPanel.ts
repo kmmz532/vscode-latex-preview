@@ -3,19 +3,46 @@ import { findBibliographyFiles } from './parser/bibtex';
 import { IMAGE_EXTENSIONS, IMAGE_MIME, findGraphics } from './parser/graphics';
 import { renderDocument } from './parser/render';
 
+/**
+ * プレビューは VS Code の Markdown プレビューと同じく 2 種類。
+ * - 追従（dynamic）：アクティブなエディタの .tex に表示を切り替える。1 つだけ
+ * - ロック（locked）：特定のファイルに固定。ファイルごとに 1 つ。複数のファイルを並べて見たいとき用
+ */
 export class PreviewPanel {
-  private static readonly panels = new Map<string, PreviewPanel>();
+  private static dynamicPanel: PreviewPanel | undefined;
+  private static readonly lockedPanels = new Map<string, PreviewPanel>();
 
   static show(context: vscode.ExtensionContext, document: vscode.TextDocument, column: vscode.ViewColumn) {
-    const existing = PreviewPanel.panels.get(document.uri.toString());
-    if (existing) {
-      existing.panel.reveal(column, true);
+    const locked = PreviewPanel.lockedPanels.get(document.uri.toString());
+    if (locked) {
+      locked.panel.reveal(column, true);
       return;
     }
-    PreviewPanel.panels.set(document.uri.toString(), new PreviewPanel(context, document, column));
+    const follow = vscode.workspace.getConfiguration('latexPreview').get<boolean>('followActiveEditor', true);
+    if (!follow) {
+      // 追従しない設定ではファイルごとにロックしたプレビューを作る
+      PreviewPanel.lockedPanels.set(document.uri.toString(), new PreviewPanel(context, document, column, true));
+      return;
+    }
+    if (PreviewPanel.dynamicPanel) {
+      PreviewPanel.dynamicPanel.setDocument(document);
+      PreviewPanel.dynamicPanel.panel.reveal(column, true);
+      return;
+    }
+    PreviewPanel.dynamicPanel = new PreviewPanel(context, document, column, false);
+  }
+
+  /** 追従するプレビューを、アクティブになった .tex に切り替える */
+  static onActiveEditorChanged(editor: vscode.TextEditor | undefined) {
+    const panel = PreviewPanel.dynamicPanel;
+    if (!panel || !editor || !isLatex(editor.document) || editor.document === panel.document) {
+      return;
+    }
+    panel.setDocument(editor.document);
   }
 
   private readonly panel: vscode.WebviewPanel;
+  private document: vscode.TextDocument;
   private readonly disposables: vscode.Disposable[] = [];
   private timer: ReturnType<typeof setTimeout> | undefined;
   private version = 0;
@@ -26,11 +53,17 @@ export class PreviewPanel {
   /** 画像の data: URI（URI → 更新日時と中身） */
   private readonly imageCache = new Map<string, { mtime: number; dataUri: string }>();
 
-  private constructor(context: vscode.ExtensionContext, private readonly document: vscode.TextDocument, column: vscode.ViewColumn) {
+  private constructor(
+    context: vscode.ExtensionContext,
+    document: vscode.TextDocument,
+    column: vscode.ViewColumn,
+    private locked: boolean
+  ) {
+    this.document = document;
     const mediaRoot = vscode.Uri.joinPath(context.extensionUri, 'dist', 'web');
     this.panel = vscode.window.createWebviewPanel(
       'latexPreview',
-      `Preview ${basename(document.uri)}`,
+      this.title(),
       { viewColumn: column, preserveFocus: true },
       { enableScripts: true, localResourceRoots: [mediaRoot], retainContextWhenHidden: true }
     );
@@ -63,7 +96,8 @@ export class PreviewPanel {
         }
       }),
       vscode.workspace.onDidCloseTextDocument((d) => {
-        if (d === this.document) {
+        // 追従するプレビューは最後の表示のまま残す（Markdown プレビューと同じ）
+        if (d === this.document && this.locked) {
           this.panel.dispose();
         }
       })
@@ -80,7 +114,11 @@ export class PreviewPanel {
       switch (msg?.type) {
         case 'ready':
           // Webview のスクリプトが読み込まれてから初回描画する
+          void this.panel.webview.postMessage({ type: 'locked', value: this.locked });
           void this.update();
+          break;
+        case 'toggleLock':
+          this.setLocked(!this.locked);
           break;
         case 'reveal': {
           // プレビューのスクロールにエディタを追従させる
@@ -106,6 +144,50 @@ export class PreviewPanel {
       }
     }, null, this.disposables);
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
+  }
+
+  private title(): string {
+    return `${this.locked ? '[Locked] ' : ''}Preview ${basename(this.document.uri)}`;
+  }
+
+  /** 表示するファイルを差し替える（追従するプレビュー用） */
+  private setDocument(document: vscode.TextDocument) {
+    if (document === this.document) {
+      return;
+    }
+    this.document = document;
+    this.bibUris.clear();
+    this.imageCache.clear();
+    this.panel.title = this.title();
+    void this.update();
+  }
+
+  private setLocked(locked: boolean) {
+    const key = this.document.uri.toString();
+    if (locked) {
+      // 同じファイルのロック済みプレビューがあれば、そちらを残してこちらは閉じる
+      const existing = PreviewPanel.lockedPanels.get(key);
+      if (existing && existing !== this) {
+        existing.panel.reveal(undefined, true);
+        this.panel.dispose();
+        return;
+      }
+      PreviewPanel.lockedPanels.set(key, this);
+      if (PreviewPanel.dynamicPanel === this) {
+        PreviewPanel.dynamicPanel = undefined;
+      }
+    } else {
+      PreviewPanel.lockedPanels.delete(key);
+      // 追従するプレビューは 1 つだけなので、既存のものは閉じて置き換える
+      if (PreviewPanel.dynamicPanel && PreviewPanel.dynamicPanel !== this) {
+        PreviewPanel.dynamicPanel.panel.dispose();
+      }
+      PreviewPanel.dynamicPanel = this;
+      PreviewPanel.onActiveEditorChanged(vscode.window.activeTextEditor);
+    }
+    this.locked = locked;
+    this.panel.title = this.title();
+    void this.panel.webview.postMessage({ type: 'locked', value: locked });
   }
 
   private scheduleUpdate() {
@@ -244,7 +326,12 @@ export class PreviewPanel {
 
   private dispose() {
     clearTimeout(this.timer);
-    PreviewPanel.panels.delete(this.document.uri.toString());
+    if (PreviewPanel.dynamicPanel === this) {
+      PreviewPanel.dynamicPanel = undefined;
+    }
+    if (PreviewPanel.lockedPanels.get(this.document.uri.toString()) === this) {
+      PreviewPanel.lockedPanels.delete(this.document.uri.toString());
+    }
     this.disposables.forEach((d) => d.dispose());
   }
 }
@@ -268,6 +355,10 @@ function makeNonce(): string {
     s += chars[Math.floor(Math.random() * chars.length)];
   }
   return s;
+}
+
+export function isLatex(doc: vscode.TextDocument): boolean {
+  return doc.languageId === 'latex' || /\.(tex|ltx)$/i.test(doc.uri.path);
 }
 
 function basename(uri: vscode.Uri): string {

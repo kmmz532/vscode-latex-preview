@@ -14,6 +14,8 @@ Unlike other LaTeX extensions, it also works in VS Code for the Web (vscode.dev 
 Use the buttons at the top right of the preview to zoom out / in (`−` / `+`), show at actual size (`100%`), fit to the window (Fit), or turn scroll sync with the editor on / off (link icon).
 Double-click on the preview to jump to that line in the editor.
 
+The preview follows the active `.tex` editor. Click the lock icon to keep it on the current file; opening the preview again then creates a new preview, so you can view several files side by side.
+
 ## Supported syntax
 - Math: `$...$` `\(...\)` `$$...$$` `\[...\]`, `equation` `align` `gather` `multline` (rendered with KaTeX)
 - Headings: `\section` to `\subsubsection` (numbered), `\paragraph`
@@ -38,6 +40,7 @@ Unsupported commands do not cause errors; they are shown as dimmed source text.
 | Setting | Default | Description |
 | --- | --- | --- |
 | `latexPreview.debounceMs` | `200` | Delay in milliseconds before the preview updates after an edit |
+| `latexPreview.followActiveEditor` | `true` | The preview follows the active `.tex` editor. When `false`, each file gets its own preview |
 | `latexPreview.showUnknownCommands` | `true` | Show unsupported commands as dimmed source text |
 
 ## Limitations

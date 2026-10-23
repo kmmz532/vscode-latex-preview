@@ -13,7 +13,8 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand('latexPreview.openPreview', open(vscode.ViewColumn.Active)),
-    vscode.commands.registerCommand('latexPreview.openPreviewToSide', open(vscode.ViewColumn.Beside))
+    vscode.commands.registerCommand('latexPreview.openPreviewToSide', open(vscode.ViewColumn.Beside)),
+    vscode.window.onDidChangeActiveTextEditor((e) => PreviewPanel.onActiveEditorChanged(e))
   );
 }
 

@@ -55,6 +55,11 @@
           "default": 200,
           "description": "Delay in milliseconds before the preview updates after an edit."
         },
+        "latexPreview.followActiveEditor": {
+          "type": "boolean",
+          "default": true,
+          "description": "The preview follows the active .tex editor. Use the lock button in the preview to keep showing a specific file. When false, each file gets its own preview."
+        },
         "latexPreview.showUnknownCommands": {
           "type": "boolean",
           "default": true,

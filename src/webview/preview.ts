@@ -67,6 +67,10 @@ const syncButton = button('', 'Sync scroll with editor', () => setState({ sync: 
 syncButton.innerHTML =
   '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.9 9.1a.75.75 0 0 1 0-1.06l1.13-1.13a.75.75 0 1 1 1.06 1.06L7.96 9.1a.75.75 0 0 1-1.06 0z"/>' +
   '<path d="M4.4 8.5 3.3 9.6a2.25 2.25 0 0 0 3.18 3.18l1.1-1.1 1.07 1.06-1.1 1.1A3.75 3.75 0 0 1 2.24 8.54l1.1-1.1zM11.6 7.5l1.1-1.1a2.25 2.25 0 0 0-3.18-3.18l-1.1 1.1-1.07-1.06 1.1-1.1a3.75 3.75 0 0 1 5.3 5.3l-1.1 1.1z"/></svg>';
+// 鍵のアイコン（このファイルに固定 / アクティブなエディタに追従）。状態は拡張機能側が持つ
+const lockButton = button('', 'Lock preview to this file', () => vscode.postMessage({ type: 'toggleLock' }));
+lockButton.innerHTML =
+  '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 7V5a3 3 0 0 1 6 0v2h1a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zm1.5 0h3V5a1.5 1.5 0 0 0-3 0z"/></svg>';
 document.body.appendChild(toolbar);
 
 function setState(next: Partial<ViewState>) {
@@ -265,6 +269,9 @@ window.addEventListener('message', async (event) => {
       ignoreScrollUntil = Date.now() + 200;
       window.scrollTo(0, scrollY);
     }
+  } else if (msg?.type === 'locked') {
+    lockButton.classList.toggle('active', !!msg.value);
+    lockButton.title = msg.value ? 'Unlock preview (follow the active editor)' : 'Lock preview to this file';
   } else if (msg?.type === 'scrollTo' && state.sync && typeof msg.line === 'number') {
     scrollToLine(msg.line);
   }
