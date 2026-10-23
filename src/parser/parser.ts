@@ -1,3 +1,4 @@
+import { inputKey } from './inputs';
 import { RawEnvironments, Token, tokenize } from './tokenizer';
 
 export type Node =
@@ -34,9 +35,13 @@ const DEFS = new Set(['def', 'gdef', 'edef', 'xdef']);
 
 /** 再帰的なマクロで止まらなくなるのを防ぐ上限 */
 const MAX_EXPANSIONS = 10000;
+/** \input の入れ子（自分自身を読み込むファイルなど）で止まらなくなるのを防ぐ上限 */
+const MAX_INPUTS = 100;
 
 export interface ParseResult {
   nodes: Node[];
+  /** \input / \include されたが inputs になかったファイル（inputKey、出現順・重複なし） */
+  missingInputs: string[];
   /** KaTeX に渡すマクロ（\name → 本体の TeX ソース） */
   macros: Record<string, string>;
 }
@@ -45,19 +50,23 @@ export function parse(src: string, syntax: Syntax): Node[] {
   return parseDocument(src, syntax).nodes;
 }
 
-export function parseDocument(src: string, syntax: Syntax): ParseResult {
-  const parser = new Parser(tokenize(src, syntax), syntax);
+/** inputs は \input / \include で読み込むファイルの中身（inputKey → 内容） */
+export function parseDocument(src: string, syntax: Syntax, inputs?: Record<string, string>): ParseResult {
+  const parser = new Parser(tokenize(src, syntax), syntax, inputs);
   const nodes = parser.parseUntil(() => false);
-  return { nodes, macros: parser.katexMacros() };
+  return { nodes, macros: parser.katexMacros(), missingInputs: [...parser.missingInputs] };
 }
 
 class Parser {
   private pos = 0;
   private readonly macros = new Map<string, Macro>();
   private expansions = 0;
+  private inputCount = 0;
+  readonly missingInputs = new Set<string>();
   constructor(
     private tokens: Token[],
-    private readonly syntax: Syntax
+    private readonly syntax: Syntax,
+    private readonly inputs?: Record<string, string>
   ) {}
 
   katexMacros(): Record<string, string> {
@@ -114,6 +123,9 @@ class Parser {
         }
         if (this.macros.has(t.name) && this.expansions < MAX_EXPANSIONS) {
           this.expand(this.macros.get(t.name)!, t.line);
+          return undefined;
+        }
+        if ((t.name === 'input' || t.name === 'include') && this.insertInput(t.name, t.line)) {
           return undefined;
         }
         if (t.name === 'begin') {
@@ -347,6 +359,57 @@ class Parser {
       }
     }
     this.tokens.splice(this.pos, 0, ...out);
+  }
+
+  /**
+   * \input{file} / \include{file} をファイルの中身のトークンに置き換える。
+   * 中身はすべて \input の行のものとして扱う（スクロール同期は \input の行に合わせる）。
+   * 読み込めないファイルなら位置を戻して false（通常のコマンドとして描画する）
+   */
+  private insertInput(name: string, line: number): boolean {
+    if (this.inputCount >= MAX_INPUTS) {
+      return false;
+    }
+    const start = this.pos;
+    this.skipWhitespace();
+    let file: string | undefined;
+    const t = this.peek();
+    const at = this.pos;
+    if (t?.type === 'lbrace') {
+      file = tokensToSource(this.readRawArg());
+    } else if (t?.type === 'text') {
+      // \input file（TeX の書き方）はファイル名を空白まで読む
+      const m = /^\s*([^\s]+)/.exec(t.value);
+      if (m) {
+        file = m[1];
+        const rest = t.value.slice(m[0].length);
+        this.tokens[this.pos] = { ...t, value: rest };
+        if (!rest) {
+          this.pos++;
+        }
+      }
+    }
+    const key = file !== undefined ? inputKey(file) : '';
+    const body = key ? this.inputs?.[key] : undefined;
+    if (body === undefined) {
+      if (key) {
+        this.missingInputs.add(key);
+      }
+      if (t) {
+        this.tokens[at] = t;
+      }
+      this.pos = start;
+      return false;
+    }
+    this.inputCount++;
+    const out = tokenize(body, this.syntax).map((x) => ({ ...x, line }));
+    // \include は前後で改ページする（プレビューでは段落を区切るだけ）
+    if (name === 'include') {
+      out.unshift({ type: 'parbreak', line });
+      out.push({ type: 'parbreak', line });
+    }
+    this.tokens.splice(this.pos, 0, ...out);
+    return true;
   }
 
   /** 現在位置の \end{...} の環境名 */

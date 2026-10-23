@@ -18,18 +18,22 @@ export type Analysis =
   | { ok: true; nodes: Node[]; macros: Record<string, string>; resources: DocumentResources }
   | { ok: false; error: string; resources: DocumentResources };
 
-/** ソースを構文木にし、外部ファイルの参照を集める */
-export function analyzeDocument(src: string): Analysis {
+/**
+ * ソースを構文木にし、外部ファイルの参照を集める。
+ * inputs は \input / \include で読み込むファイルの中身。読み込んだファイルがさらに \input していれば
+ * resources.inputs に出るので、拡張機能側はそれを読んで解析し直す
+ */
+export function analyzeDocument(src: string, inputs?: Record<string, string>): Analysis {
   try {
-    const { nodes, macros } = parseDocument(src, registry().syntax);
-    return { ok: true, nodes, macros, resources: collectResources(nodes) };
+    const { nodes, macros, missingInputs } = parseDocument(src, registry().syntax, inputs);
+    return { ok: true, nodes, macros, resources: collectResources(nodes, missingInputs) };
   } catch (e) {
     return { ok: false, error: String(e), resources: collectResources([]) };
   }
 }
 
 export function renderDocument(src: string, opts: RenderOptions): RenderResult {
-  return renderAnalysis(analyzeDocument(src), opts);
+  return renderAnalysis(analyzeDocument(src, opts.inputs), opts);
 }
 
 /** 解析結果を HTML にする（参照ファイルの中身は opts で渡す） */

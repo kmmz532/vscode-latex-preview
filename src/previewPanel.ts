@@ -3,6 +3,9 @@ import { analyzeDocument, renderAnalysis, RenderResult } from './parser/render';
 import type { FromWebview, ToWebview } from './protocol';
 import { ResourceLoader } from './resourceLoader';
 
+/** \input の入れ子をたどる深さの上限 */
+const MAX_INPUT_DEPTH = 10;
+
 /**
  * プレビューは VS Code の Markdown プレビューと同じく 2 種類。
  * - 追従（dynamic）：アクティブなエディタの .tex に表示を切り替える。1 つだけ
@@ -180,14 +183,31 @@ export class PreviewPanel {
     // 参照ファイルの読み込み中に次の更新が始まったら古い結果は捨てる
     const version = ++this.version;
     const config = vscode.workspace.getConfiguration('latexPreview');
-    const analysis = analyzeDocument(this.document.getText());
+    const src = this.document.getText();
+    // \input したファイルがさらに \input していることがあるので、新しいファイルが出なくなるまで読んでは解析し直す
+    const inputs: Record<string, string> = {};
+    const tried = new Set<string>();
+    this.resources.clearInputs();
+    let analysis = analyzeDocument(src, inputs);
+    for (let depth = 0; depth < MAX_INPUT_DEPTH; depth++) {
+      const names = analysis.resources.inputs.filter((n) => !tried.has(n));
+      if (!names.length) {
+        break;
+      }
+      names.forEach((n) => tried.add(n));
+      Object.assign(inputs, await this.resources.loadInputs(this.document.uri, names));
+      if (version !== this.version) {
+        return;
+      }
+      analysis = analyzeDocument(src, inputs);
+    }
     const loaded = await this.resources.load(this.document.uri, analysis.resources);
     if (version !== this.version) {
       return;
     }
     let result: RenderResult;
     try {
-      result = renderAnalysis(analysis, { showUnknownCommands: config.get<boolean>('showUnknownCommands', true), ...loaded });
+      result = renderAnalysis(analysis, { showUnknownCommands: config.get<boolean>('showUnknownCommands', true), inputs, ...loaded });
     } catch (e) {
       result = { html: `<pre class="error">${String(e)}</pre>`, macros: {} };
     }

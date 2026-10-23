@@ -77,7 +77,9 @@ body {
 
 /* 段落間は空けず（\parskip=0）、先頭を \parindent 下げる */
 p { margin: 0; text-indent: var(--indent); }
-p.noindent,
+/* ページをまたいで分けた段落。前半の最終行は両端揃えのまま、後半は字下げしない */
+p.split-head { text-align-last: justify; }
+p.noindent, p.split-tail,
 li > p, dd > p, .float p, .center p, .flushleft p, .flushright p, .maketitle p { text-indent: 0; }
 /* article 系は見出し直後の段落を字下げしない（jsarticle は字下げする） */
 .doc.en :is(h2, h3, h4) + p { text-indent: 0; }
@@ -127,7 +129,7 @@ h4, h5, h6 { font-size: 1em; }
 .bibitem { display: flex; gap: 0.5em; margin: 0.2em 0; text-align: left; }
 .bib-label { flex: none; }
 .bib-body { flex: 1; min-width: 0; }
-.bib-missing { color: var(--vscode-descriptionForeground, #888); font-size: 0.85em; text-indent: 0; }
+.bib-missing, .missing { color: var(--vscode-descriptionForeground, #888); font-size: 0.85em; text-indent: 0; }
 
 .float { margin: 1.5em 0; text-align: center; break-inside: avoid; }
 .twocolumn > .float.span { column-span: all; }

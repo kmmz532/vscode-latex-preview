@@ -21,6 +21,12 @@ const heading = (level: number, counter?: string): CommandHandler => (n, ctx) =>
 
 const symbol = (s: string): CommandHandler => () => inline(s);
 
+const missingInput: CommandHandler = (n) => {
+  const name = plain(n.args[0]).trim();
+  const file = /\.[a-zA-Z0-9]+$/.test(name) ? name : `${name}.tex`;
+  return block(`<p class="missing" data-line="${n.line}">${escapeHtml(file)} が見つかりません</p>`);
+};
+
 /** \item ごとに子ノードを分割する */
 function splitItems(children: Node[]): { opt?: string; nodes: Node[] }[] {
   const items: { opt?: string; nodes: Node[] }[] = [];
@@ -112,6 +118,11 @@ export const base: Package = {
     footnote: (n, ctx) => inline(`<span class="footnote">${renderInline(n.args[0], ctx)}</span>`),
     url: (n) => inline(`<code class="url">${escapeHtml(plain(n.args[0]))}</code>`),
     href: { args: 2, render: (n, ctx) => inline(`<span class="link">${renderInline(n.args[1], ctx)}</span>`) },
+
+    // 読み込めたファイルはパーサが中身に置き換えるので、ここに来るのは見つからなかったもの
+    input: { args: 1, render: missingInput },
+    include: { args: 1, render: missingInput },
+    includeonly: ignore,
 
     maketitle: { args: 0, render: maketitle },
     title: ignore,

@@ -126,7 +126,7 @@ new ResizeObserver(() => {
 /**
  * .doc.paged の中身を \textheight ごとのページに分ける。
  * ブロックを 1 つずつ入れ、あふれたら（2 段組なら 3 段目にはみ出したら）次のページへ送る。
- * 段落はページをまたいで分割しない（段の間はブラウザが分割する）
+ * 段落（<p>）はあふれた行の頭で分け、残りを次のページへ送る（段の間はブラウザが分割する）
  */
 function paginate(doc: HTMLElement) {
   const segments: { two: boolean; blocks: Element[] }[] = [];
@@ -145,12 +145,25 @@ function paginate(doc: HTMLElement) {
   // \onecolumn / \twocolumn の切替は LaTeX と同じく改ページ
   for (const seg of segments) {
     let body = newPage(doc, seg.two);
-    for (const block of seg.blocks) {
-      body.appendChild(block);
-      if (overflows(body, seg.two) && body.children.length > 1) {
-        block.remove();
-        body = newPage(doc, seg.two);
+    for (const first of seg.blocks) {
+      let block: Element | undefined = first;
+      while (block) {
         body.appendChild(block);
+        if (!overflows(body, seg.two)) {
+          break;
+        }
+        const rest = splitParagraph(block, body, seg.two);
+        if (rest) {
+          body = newPage(doc, seg.two);
+          block = rest;
+          continue;
+        }
+        if (body.children.length > 1) {
+          block.remove();
+          body = newPage(doc, seg.two);
+          body.appendChild(block);
+        }
+        break;
       }
     }
   }
@@ -167,6 +180,71 @@ function newPage(doc: HTMLElement, two: boolean): HTMLElement {
   cols.className = 'twocolumn';
   page.appendChild(cols);
   return cols;
+}
+
+/**
+ * ページからあふれた段落を、最初にあふれた行の頭で 2 つに分ける。
+ * 前半は block に残し、後半を新しい <p> にして返す。分けられなければ undefined
+ */
+function splitParagraph(block: Element, body: HTMLElement, two: boolean): HTMLElement | undefined {
+  if (block.tagName !== 'P') {
+    return undefined;
+  }
+  const box = body.getBoundingClientRect();
+  // ページに収まるか：1 段組は下端、2 段組は 3 段目（右端より右）にはみ出していないか
+  const fits = (r: DOMRect) => (two ? r.left < box.left + body.clientWidth - 1 : r.bottom <= box.top + body.clientHeight + 1);
+  // 空白以外の文字の位置（文書順。fits は文書順に true → false と変わる）
+  const chars: { node: Text; offset: number }[] = [];
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
+    for (let i = 0; i < node.data.length; i++) {
+      if (!/\s/.test(node.data[i])) {
+        chars.push({ node, offset: i });
+      }
+    }
+  }
+  const range = document.createRange();
+  const charFits = (k: number) => {
+    range.setStart(chars[k].node, chars[k].offset);
+    range.setEnd(chars[k].node, chars[k].offset + 1);
+    const r = range.getClientRects()[0];
+    return !r || fits(r);
+  };
+  // 収まらない最初の文字を二分探索
+  let lo = 0;
+  let hi = chars.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (charFits(mid)) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  // 1 行も収まらない、または全部収まる（あふれの原因が別）なら分けない
+  if (lo === 0 || lo >= chars.length) {
+    return undefined;
+  }
+  const at = chars[lo];
+  // 数式などの途中では切らず、その要素の手前で切る
+  const atomic = at.node.parentElement?.closest('.math, code, .footnote, .cite, .ref');
+  if (atomic && block.contains(atomic)) {
+    range.setStartBefore(atomic);
+  } else {
+    range.setStart(at.node, at.offset);
+  }
+  range.setEnd(block, block.childNodes.length);
+  const tail = range.extractContents();
+  if (!tail.textContent?.trim() || !block.textContent?.trim()) {
+    block.appendChild(tail);
+    return undefined;
+  }
+  // 前半の最終行も両端揃えにし、後半は字下げしない（続きの段落）
+  block.classList.add('split-head');
+  const rest = document.createElement('p');
+  rest.className = 'split-tail';
+  rest.appendChild(tail);
+  return rest;
 }
 
 function overflows(body: HTMLElement, two: boolean): boolean {

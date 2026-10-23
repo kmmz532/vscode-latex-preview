@@ -9,10 +9,12 @@ export interface DocumentResources {
   graphics: string[];
   /** \graphicspath{{dir1/}{dir2/}} のフォルダ（最後の指定） */
   graphicsPaths: string[];
+  /** \input / \include のうち、まだ中身を渡されていないファイル（拡張子 .tex なし） */
+  inputs: string[];
 }
 
 /** 構文木から参照を集める。コメントは字句解析で除かれ、マクロは展開済み */
-export function collectResources(nodes: Node[]): DocumentResources {
+export function collectResources(nodes: Node[], inputs: string[] = []): DocumentResources {
   const bibliographies = new Set<string>();
   const graphics = new Set<string>();
   let graphicsPaths: string[] = [];
@@ -44,5 +46,5 @@ export function collectResources(nodes: Node[]): DocumentResources {
         break;
     }
   });
-  return { bibliographies: [...bibliographies], graphics: [...graphics], graphicsPaths };
+  return { bibliographies: [...bibliographies], graphics: [...graphics], graphicsPaths, inputs };
 }

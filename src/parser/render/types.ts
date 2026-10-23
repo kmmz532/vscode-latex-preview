@@ -9,6 +9,8 @@ export interface RenderOptions {
   bibFiles?: Record<string, string>;
   /** \includegraphics のパス（ソースに書かれたまま）→ data: URI。表示できないものは含まない */
   images?: Record<string, string>;
+  /** \input / \include で読み込むファイルの中身（inputKey → 内容）。読めなかったものは含まない */
+  inputs?: Record<string, string>;
 }
 
 export interface RenderResult {
