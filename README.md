@@ -13,7 +13,7 @@ Unlike other LaTeX extensions, it also works in VS Code for the Web (vscode.dev 
 2. Click the preview icon at the top right of the editor, or run `LaTeX Preview: Open Preview to the Side` from the Command Palette
 3. The preview updates as you type
 
-Use the buttons at the top right of the preview to zoom out / in (`−` / `+`), show at actual size (`100%`), fit to the window (Fit), or turn scroll sync with the editor on / off (link icon).
+Use the buttons at the top right of the preview to zoom out / in (`−` / `+`), show at actual size (`100%`), or fit to the window (Fit). Scroll sync with the editor can be turned off with the `latexPreview.scrollSync` setting.
 Double-click on the preview to jump to that line in the editor.
 
 The preview follows the active `.tex` editor. Click the lock icon to keep it on the current file; opening the preview again then creates a new preview, so you can view several files side by side.
@@ -45,6 +45,7 @@ Unsupported commands do not cause errors; they are shown as dimmed source text.
 | `latexPreview.followActiveEditor` | `true` | The preview follows the active `.tex` editor. When `false`, each file gets its own preview |
 | `latexPreview.mathMacros` | `{}` | KaTeX macros available in every document (e.g. `{ "\\R": "\\mathbb{R}" }` in settings.json). `\newcommand` in the document takes precedence |
 | `latexPreview.paginate` | `true` | Split documents with `\documentclass` into pages of `\textheight`. When `false`, show one continuous page |
+| `latexPreview.scrollSync` | `true` | Sync scrolling between the editor and the preview |
 | `latexPreview.showUnknownCommands` | `true` | Show unsupported commands as dimmed source text |
 
 You can also open them from Open Settings in the preview's "…" menu.

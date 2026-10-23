@@ -6,6 +6,8 @@ export type ToWebview =
   | { type: 'update'; html: string; macros: Record<string, string>; line?: number }
   /** ロック状態（鍵ボタンの表示用） */
   | { type: 'locked'; value: boolean }
+  /** Webview 側で使う設定（latexPreview.*） */
+  | { type: 'config'; scrollSync: boolean }
   /** エディタのスクロールに合わせる */
   | { type: 'scrollTo'; line: number };
 

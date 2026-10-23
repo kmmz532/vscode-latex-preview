@@ -73,6 +73,11 @@
           "default": true,
           "description": "Split documents with \\documentclass into pages of \\textheight. When false, the document is shown as one continuous page."
         },
+        "latexPreview.scrollSync": {
+          "type": "boolean",
+          "default": true,
+          "description": "Sync scrolling between the editor and the preview."
+        },
         "latexPreview.showUnknownCommands": {
           "type": "boolean",
           "default": true,

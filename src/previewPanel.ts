@@ -78,6 +78,7 @@ export class PreviewPanel {
       }),
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (e.affectsConfiguration('latexPreview')) {
+          this.postConfig();
           this.update();
         }
       }),
@@ -101,6 +102,7 @@ export class PreviewPanel {
         case 'ready':
           // Webview のスクリプトが読み込まれてから初回描画する
           this.post({ type: 'locked', value: this.locked });
+          this.postConfig();
           void this.update();
           break;
         case 'toggleLock':
@@ -220,6 +222,12 @@ export class PreviewPanel {
     }
     // 描画後にエディタの表示位置へ合わせる
     this.post({ type: 'update', ...result, line: this.editor()?.visibleRanges[0]?.start.line });
+  }
+
+  /** Webview 側で使う設定を送る */
+  private postConfig() {
+    const config = vscode.workspace.getConfiguration('latexPreview');
+    this.post({ type: 'config', scrollSync: config.get<boolean>('scrollSync', true) });
   }
 
   private post(msg: ToWebview) {

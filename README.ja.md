@@ -13,7 +13,7 @@ LaTeXを簡易プレビューするVSCode拡張機能<br />
 2. エディタ右上のプレビューアイコン、またはコマンドパレットから `LaTeX Preview: Open Preview to the Side` を実行
 3. 編集内容はリアルタイムに反映される
 
-プレビュー右上のボタンで拡大/縮小（`−` / `+`）、等倍（`100%`）、窓幅に合わせる（Fit）、エディタとのスクロール同期のオン/オフ（鎖のアイコン）を切り替えられる。
+プレビュー右上のボタンで拡大/縮小（`−` / `+`）、等倍（`100%`）、窓幅に合わせる（Fit）を切り替えられる。エディタとのスクロール同期は設定 `latexPreview.scrollSync` でオフにできる。
 プレビューをダブルクリックすると、エディタのその行へ移動する。
 
 プレビューは選択中のタブの `.tex` に追従して切り替わる。鍵のアイコンで今のファイルに固定でき、その状態でもう一度プレビューを開くと新しいプレビューができるので、複数のファイルを並べて表示できる。
@@ -45,6 +45,7 @@ LaTeXを簡易プレビューするVSCode拡張機能<br />
 | `latexPreview.followActiveEditor` | `true` | 選択中のタブの `.tex` に追従する。`false` ならファイルごとに別のプレビューを開く |
 | `latexPreview.mathMacros` | `{}` | すべての文書で使える KaTeX のマクロ（settings.json に `{ "\\R": "\\mathbb{R}" }` のように書く）。文書中の `\newcommand` が優先 |
 | `latexPreview.paginate` | `true` | `\documentclass` のある文書を `\textheight` ごとのページに分ける。`false` なら 1 枚に続けて表示 |
+| `latexPreview.scrollSync` | `true` | エディタとプレビューのスクロールを同期する |
 | `latexPreview.showUnknownCommands` | `true` | 未対応コマンドをソースのまま表示する |
 
 プレビューの右上の「…」→ Open Settings からも開ける。
