@@ -220,7 +220,7 @@ function collectBlocks(doc: HTMLElement): Block[] {
  * 変更箇所の後でページの始まりが前回と揃ったところから先は、前回のページをそのまま残す。
  *
  * 新しいページを始める前に shouldPause（引数は直前に作ったページ）が true なら中断（yield）する。
- * 中断中は、まだ組み直していない前回のページを外し、同じ高さの空き（.page-pending）で埋めておく。
+ * 中断中は、まだ組み直していない前回のページを外し、同じ高さを空けておく（doc に data-pending が付く）。
  * 中断したまま return() されたら、組み終えたところまでを layout に残す（次の更新はそこから組み直す）
  */
 function* paginate(
@@ -276,20 +276,23 @@ function* paginate(
   }
   let dropUntil = oldPages.length;
   const created: HTMLElement[] = [];
-  let placeholder: HTMLElement | null = null;
+  let paused = false;
+  const docStyle = doc.getAttribute('style');
 
-  /** 中断する。初回は組み直していない前回のページを外して空きで埋める（外さないと後から足すページの測定が遅い） */
+  /**
+   * 中断する。初回は組み直していない前回のページを外し、その高さを doc の padding で空けておく
+   * （外さないと後から足すページの測定が遅い。空きを要素にして手前へ差し込むのも遅い）
+   */
   function* pause() {
-    if (!placeholder) {
+    if (!paused) {
+      paused = true;
       const stale = oldPages.slice(r).filter((p) => p.el.parentNode === doc);
-      placeholder = document.createElement('div');
-      placeholder.className = 'page-pending';
       if (stale.length > 0) {
         const last = stale[stale.length - 1].el;
-        placeholder.style.height = `${last.offsetTop + last.offsetHeight - stale[0].el.offsetTop}px`;
+        doc.style.paddingBottom = `${last.offsetTop + last.offsetHeight - stale[0].el.offsetTop}px`;
       }
       stale.forEach((p) => p.el.remove());
-      doc.appendChild(placeholder);
+      doc.dataset.pending = '';
     }
     yield;
   }
@@ -297,7 +300,7 @@ function* paginate(
   const newPage = (i: number, split: boolean): HTMLElement => {
     const page = document.createElement('div');
     page.className = 'page';
-    doc.insertBefore(page, placeholder);
+    doc.appendChild(page);
     created.push(page);
     pages.push({ el: page, start: i, split, end: i });
     if (!blocks[i].two) {
@@ -316,8 +319,8 @@ function* paginate(
     }
     for (const p of oldPages.slice(q)) {
       pages.push({ ...p, start: p.start + shift, end: p.end + shift });
-      if (placeholder) {
-        doc.insertBefore(p.el, placeholder);
+      if (paused) {
+        doc.appendChild(p.el);
       }
     }
     dropUntil = q;
@@ -423,8 +426,14 @@ function* paginate(
     }
     done = true;
   } finally {
-    if (placeholder) {
-      (placeholder as HTMLElement).remove();
+    if (paused) {
+      // padding を外す（style 属性は元の文字列に戻す）
+      if (docStyle === null) {
+        doc.removeAttribute('style');
+      } else {
+        doc.setAttribute('style', docStyle);
+      }
+      delete doc.dataset.pending;
     } else {
       for (const p of oldPages.slice(r, dropUntil)) {
         p.el.remove();
