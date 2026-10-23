@@ -2,7 +2,7 @@
   "name": "simple-latex-preview",
   "displayName": "Simple LaTeX Preview",
   "description": "Lightweight LaTeX preview that also works in VS Code for the Web",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "license": "MIT",
   "icon": "images/icon.png",
   "repository": {
