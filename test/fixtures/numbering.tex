@@ -1,0 +1,16 @@
+\documentclass{article}
+\begin{document}
+\maketitle
+\begin{abstract}Forward: \ref{sec:b}, \ref{sub:b1}, \eqref{eq:x}, \ref{fig:f}, \ref{undefined}.\end{abstract}
+\section{A}
+\subsection{A1}
+\subsubsection{A1a}
+\section{B}\label{sec:b}
+\subsection{B1}\label{sub:b1}
+\setcounter{section}{9}
+\section{J}
+\addtocounter{equation}{4}
+\begin{equation}x\label{eq:x}\end{equation}
+\begin{figure}\caption{F}\label{fig:f}\end{figure}
+Today is \today.
+\end{document}

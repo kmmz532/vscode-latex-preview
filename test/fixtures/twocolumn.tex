@@ -1,0 +1,35 @@
+\documentclass[a4paper,twocolumn]{jsarticle}
+\usepackage{graphicx}
+\usepackage{url}
+\usepackage{cite}
+\pagestyle{empty}
+\setlength{\textheight}{240mm}
+\setlength{\topmargin}{-10mm}
+\hyphenation{type-set-ting}
+
+\title{進捗報告}
+\date{第3回(\today)}% 回数は手で更新
+\author{サンプル著者}
+
+\begin{document}
+\maketitle
+
+\section{やったこと}
+パーサの単体テストを追加した.
+組版の基本は \cite{knuth} を参考にした.
+	インデントされた行も, 段落の一部として扱われるはず\cite{lamport,knuth}.
+
+存在しない文献の参照 \cite{missing} も確認する.
+
+\section{次にやること}
+CIでテストを自動実行する.
+
+%\begin{figure}[htbp]
+% \centering
+% \includegraphics{img}
+%\end{figure}
+
+\bibliographystyle{junsrt}
+\bibliography{refs}
+
+\end{document}
