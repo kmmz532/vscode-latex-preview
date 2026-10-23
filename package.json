@@ -4,6 +4,15 @@
   "description": "Lightweight LaTeX preview that also works in VS Code for the Web",
   "version": "0.0.1",
   "license": "MIT",
+  "icon": "images/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kmmz532/vscode-latex-preview.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kmmz532/vscode-latex-preview/issues"
+  },
+  "homepage": "https://github.com/kmmz532/vscode-latex-preview#readme",
   "publisher": "kmmz1127",
   "engines": {
     "vscode": "^1.90.0"
