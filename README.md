@@ -58,7 +58,7 @@ You can also open them from Open Settings in the preview's "…" menu.
 ## Bug reports and feature requests
 - https://github.com/kmmz532/vscode-latex-preview/issues
 
-For developers, see [docs/README.md](docs/README.md) (Japanese).
+For developers, see [docs/README.en.md](docs/README.en.md) (English) or [docs/README.md](docs/README.md) (Japanese).
 
 ## License
 - MIT
