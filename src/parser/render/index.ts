@@ -1,7 +1,8 @@
 import { computeLayout } from '../docclass';
 import { Node, parseDocument } from '../parser';
-import { prepareBib } from './bibliography';
+import { prepareBib } from './packages/bibliography';
 import { renderColumns } from './blocks';
+import { registry } from './registry';
 import { escapeHtml, plain } from './text';
 import type { Ctx, Meta, RenderOptions, RenderResult } from './types';
 
@@ -12,7 +13,7 @@ export function renderDocument(src: string, opts: RenderOptions): RenderResult {
   let nodes: Node[];
   let macros: Record<string, string>;
   try {
-    ({ nodes, macros } = parseDocument(src));
+    ({ nodes, macros } = parseDocument(src, registry().syntax));
   } catch (e) {
     return { html: `<pre class="error">Parse error: ${escapeHtml(String(e))}</pre>`, macros: {} };
   }

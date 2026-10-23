@@ -1,0 +1,24 @@
+\documentclass{article}
+\newcommand{\hello}[1]{Hello, \textbf{#1}!}
+\newcommand\opt[2][dflt]{(#1/#2)}
+\providecommand{\hello}{ignored}
+\def\pair#1#2{<#1,#2>}
+\begin{document}
+\section{Macros} % comment
+\hello{World} \opt{x} \opt[y]{z} \pair ab \pair{c}{d}
+$$x^2$$ \(a\) \[b\] \$5 \verb|\x{y}| \lstinline{q}
+\begin{verbatim*}
+a  b
+\end{verbatim*}
+\begin{comment}hidden\end{comment}
+\begin{minted}{python}
+print(1)
+\end{minted}
+\begin{minipage}{3cm}mp\end{minipage}
+\tableofcontents \setlength{\parindent}{2em} \href{http://x}{link} \西暦
+\begin{eqnarray*}a\\b\end{eqnarray*}
+\begin{gather}a\\b\\\end{gather}
+\begin{tabular*}{\textwidth}{rcl}1&2&3\\\end{tabular*}
+\begin{thebibliography}{9}\bibitem{a} A.\end{thebibliography}
+\cite{a} \nocite{*} unclosed } \end{foo}
+\end{document}

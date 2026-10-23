@@ -1,4 +1,4 @@
-import { Token, tokenize } from './tokenizer';
+import { RawEnvironments, Token, tokenize } from './tokenizer';
 
 export type Node =
   | { kind: 'text'; value: string; line: number }
@@ -9,17 +9,13 @@ export type Node =
   | { kind: 'verb'; text: string; display: boolean; env?: string; opt?: string; line: number }
   | { kind: 'parbreak'; line: number };
 
-/** 必須引数の数。未登録コマンドは後続の {...} をすべて引数として取る */
-const ARITY: Record<string, number> = {
-  item: 0, maketitle: 0, today: 0, LaTeX: 0, TeX: 0, centering: 0, noindent: 0,
-  newpage: 0, clearpage: 0, onecolumn: 0, twocolumn: 0, tableofcontents: 0, hline: 0, par: 0, '\\': 0,
-  multicolumn: 3, multirow: 3, cline: 1, href: 2, setlength: 2, setcounter: 2, addtolength: 2,
-};
-
-/** 環境ごとの必須引数の数 */
-const ENV_ARITY: Record<string, number> = {
-  tabular: 1, 'tabular*': 2, tabularx: 2, minipage: 1, thebibliography: 1,
-};
+/** パーサが知っておくべきコマンド・環境の情報（レンダラのパッケージ定義から作る） */
+export interface Syntax extends RawEnvironments {
+  /** コマンドの必須引数の数。undefined なら後続の {...} をすべて引数として取る */
+  commandArgs(name: string): number | undefined;
+  /** 環境の必須引数の数 */
+  envArgs(name: string): number;
+}
 
 /** \newcommand 等で定義されたマクロ */
 interface Macro {
@@ -45,12 +41,12 @@ export interface ParseResult {
   macros: Record<string, string>;
 }
 
-export function parse(src: string): Node[] {
-  return parseDocument(src).nodes;
+export function parse(src: string, syntax: Syntax): Node[] {
+  return parseDocument(src, syntax).nodes;
 }
 
-export function parseDocument(src: string): ParseResult {
-  const parser = new Parser(tokenize(src));
+export function parseDocument(src: string, syntax: Syntax): ParseResult {
+  const parser = new Parser(tokenize(src, syntax), syntax);
   const nodes = parser.parseUntil(() => false);
   return { nodes, macros: parser.katexMacros() };
 }
@@ -59,7 +55,10 @@ class Parser {
   private pos = 0;
   private readonly macros = new Map<string, Macro>();
   private expansions = 0;
-  constructor(private tokens: Token[]) {}
+  constructor(
+    private tokens: Token[],
+    private readonly syntax: Syntax
+  ) {}
 
   katexMacros(): Record<string, string> {
     const out: Record<string, string> = {};
@@ -195,7 +194,7 @@ class Parser {
   private parseCommand(name: string, line: number): Node {
     const opt = this.readOpt();
     const args: Node[][] = [];
-    const arity = ARITY[name];
+    const arity = this.syntax.commandArgs(name);
     if (arity === undefined) {
       let a: Node[] | undefined;
       // 1 文字の記号コマンド（\% \& など）は引数を取らない
@@ -219,7 +218,7 @@ class Parser {
     const name = nameNodes.map((n) => (n.kind === 'text' ? n.value : '')).join('').trim();
     const opt = this.readOpt();
     const args: Node[][] = [];
-    for (let k = 0; k < (ENV_ARITY[name] ?? 0); k++) {
+    for (let k = 0; k < this.syntax.envArgs(name); k++) {
       const a = this.readArg();
       if (a) {
         args.push(a);
@@ -247,7 +246,7 @@ class Parser {
     if (keepExisting && this.macros.has(name)) {
       return;
     }
-    this.macros.set(name, { nargs: n, defaultOpt: def !== undefined ? tokenize(def) : undefined, body });
+    this.macros.set(name, { nargs: n, defaultOpt: def !== undefined ? tokenize(def, this.syntax) : undefined, body });
   }
 
   /** \def\name#1#2{body}（区切り付きパラメータは非対応） */
@@ -327,7 +326,7 @@ class Parser {
     const args: Token[][] = [];
     if (m.defaultOpt) {
       const opt = this.readOpt();
-      args.push(opt !== undefined ? tokenize(opt) : m.defaultOpt);
+      args.push(opt !== undefined ? tokenize(opt, this.syntax) : m.defaultOpt);
     }
     while (args.length < m.nargs) {
       args.push(this.readRawArg());

@@ -59,6 +59,33 @@ export type EnvNode = Extract<Node, { kind: 'env' }>;
 export type CommandHandler = (n: CommandNode, ctx: Ctx) => Out;
 export type EnvHandler = (n: EnvNode, ctx: Ctx) => Out;
 
+export interface CommandDef {
+  /** 必須引数の数。省略時は後続の {...} をすべて引数として取る */
+  args?: number;
+  /** 省略時は未知のコマンドと同じ扱い（引数の数だけ教えたいときに使う） */
+  render?: CommandHandler;
+}
+
+export interface EnvDef {
+  /** \begin{name} 直後の必須引数の数 */
+  args?: number;
+  render?: EnvHandler;
+}
+
+/**
+ * LaTeX のパッケージに相当する機能のまとまり。
+ * コマンドの構文（引数の数）と描画をここで一緒に定義し、パーサとレンダラの両方が参照する
+ */
+export interface Package {
+  commands?: Record<string, CommandHandler | CommandDef>;
+  environments?: Record<string, EnvHandler | EnvDef>;
+  /** 中身を数式として KaTeX に渡す環境（描画は math ノードとして行う） */
+  mathEnvironments?: string[];
+  /** 中身を解釈しない環境（描画は verb ノードとして行う） */
+  verbatimEnvironments?: string[];
+}
+
 export const inline = (html: string): Out => ({ html, block: false });
 export const block = (html: string): Out => ({ html, block: true });
 export const NOTHING = inline('');
+export const ignore: CommandHandler = () => NOTHING;

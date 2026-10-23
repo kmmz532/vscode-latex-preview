@@ -7,19 +7,18 @@ export type Token =
   | { type: 'parbreak'; line: number }
   | { type: 'text'; value: string; line: number };
 
-/** 中身を解釈せずそのまま表示する環境 */
-const VERB_ENVS = new Set(['verbatim', 'verbatim*', 'Verbatim', 'lstlisting', 'minted', 'comment']);
-
-/** 数式として生のまま KaTeX に渡す環境 */
-export const MATH_ENVS = new Set([
-  'equation', 'equation*', 'align', 'align*', 'gather', 'gather*',
-  'multline', 'multline*', 'eqnarray', 'eqnarray*', 'displaymath', 'math',
-]);
+/** 中身を解釈せずに 1 トークンとして切り出す環境 */
+export interface RawEnvironments {
+  /** 数式として生のまま KaTeX に渡す環境 */
+  math: ReadonlySet<string>;
+  /** 中身を解釈せずそのまま表示する環境 */
+  verbatim: ReadonlySet<string>;
+}
 
 /** ひらがな・カタカナ・漢字 */
 const CJK = /[぀-ヿ㐀-䶿一-鿿豈-﫿]/;
 
-export function tokenize(src: string): Token[] {
+export function tokenize(src: string, raw: RawEnvironments): Token[] {
   const tokens: Token[] = [];
   let i = 0;
   let line = 0;
@@ -87,7 +86,7 @@ export function tokenize(src: string): Token[] {
       }
       if (src.startsWith('\\begin', i)) {
         const m = /^\\begin\s*\{([^}]+)\}/.exec(src.slice(i, i + 64));
-        if (m && MATH_ENVS.has(m[1])) {
+        if (m && raw.math.has(m[1])) {
           const close = `\\end{${m[1]}}`;
           const end = src.indexOf(close, i + m[0].length);
           if (end >= 0) {
@@ -97,7 +96,7 @@ export function tokenize(src: string): Token[] {
             continue;
           }
         }
-        if (m && VERB_ENVS.has(m[1])) {
+        if (m && raw.verbatim.has(m[1])) {
           const close = `\\end{${m[1]}}`;
           let p = i + m[0].length;
           // \begin{lstlisting}[caption=...] / \begin{minted}[opts]{lang} の引数

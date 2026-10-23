@@ -1,7 +1,7 @@
-import { Node, parse } from '../parser';
-import { COMMANDS } from './commands';
-import { ENVS } from './envs';
-import { renderMath, renderVerb } from './math';
+import type { Node } from '../parser';
+import { renderMath } from './packages/math';
+import { renderVerb } from './packages/verbatim';
+import { parseFragment, registry } from './registry';
 import { escapeHtml, renderText } from './text';
 import { block, CommandNode, Ctx, EnvNode, inline, NOTHING, Out } from './types';
 
@@ -25,7 +25,7 @@ export function renderColumns(nodes: Node[], twoColumn: boolean, ctx: Ctx): stri
       twoColumn = n.name === 'twocolumn';
       // \twocolumn[...] のオプション引数は段組みをまたいで 1 列で出す
       if (n.opt) {
-        header = `<div class="colspan">${renderBlocks(parse(n.opt), ctx)}</div>`;
+        header = `<div class="colspan">${renderBlocks(parseFragment(n.opt), ctx)}</div>`;
       }
     } else {
       segment.push(n);
@@ -93,11 +93,11 @@ function renderNode(n: Node, ctx: Ctx): Out {
     case 'parbreak':
       return NOTHING;
     case 'command': {
-      const h = COMMANDS[n.name];
+      const h = registry().commands.get(n.name)?.render;
       return h ? h(n, ctx) : renderUnknownCommand(n, ctx);
     }
     case 'env': {
-      const h = ENVS[n.name];
+      const h = registry().environments.get(n.name)?.render;
       return h ? h(n, ctx) : renderUnknownEnv(n, ctx);
     }
   }

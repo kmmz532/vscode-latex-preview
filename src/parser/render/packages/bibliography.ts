@@ -1,8 +1,26 @@
-import { BibEntry, parseBib, splitAuthors } from '../bibtex';
-import { Node, parse } from '../parser';
-import { renderInline } from './blocks';
-import { escapeHtml, plain, renderText, walk } from './text';
-import { BibState, block, CommandNode, Ctx, EnvNode, inline, Out } from './types';
+import { BibEntry, parseBib, splitAuthors } from '../../bibtex';
+import type { Node } from '../../parser';
+import { renderInline } from '../blocks';
+import { parseFragment } from '../registry';
+import { escapeHtml, plain, renderText, walk } from '../text';
+import { BibState, block, CommandHandler, CommandNode, Ctx, EnvNode, ignore, inline, Out, Package } from '../types';
+
+/** 引用コマンド（文献リストの収集にも使う） */
+const CITE_COMMANDS = ['cite', 'citep', 'citet'];
+
+/** cite と文献リスト（ibliography の .bib / thebibliography 環境） */
+export const bibliography: Package = {
+  commands: {
+    ...Object.fromEntries(CITE_COMMANDS.map((c): [string, CommandHandler] => [c, renderCite])),
+    nocite: ignore,
+    bibliography: renderBibliography,
+    bibliographystyle: ignore,
+    bibitem: ignore,
+  },
+  environments: {
+    thebibliography: { args: 1, render: renderTheBibliography },
+  },
+};
 
 /** 引用順に並べるスタイル（それ以外は著者名順） */
 const CITATION_ORDER_STYLES = /^(unsrt|junsrt|ieeetr|unsrtnat|splncs|jIEEEtran|IEEEtran|ieee)/i;
@@ -25,7 +43,7 @@ export function prepareBib(nodes: Node[], bibFiles: Record<string, string>): Bib
     }
     if (n.name === 'bibliographystyle') {
       style = plain(n.args[0]).trim();
-    } else if (n.name === 'cite' || n.name === 'citep' || n.name === 'citet' || n.name === 'nocite') {
+    } else if (CITE_COMMANDS.includes(n.name) || n.name === 'nocite') {
       for (const k of plain(n.args[0]).split(',').map((s) => s.trim()).filter(Boolean)) {
         if (k === '*') {
           citeAll = true;
@@ -75,7 +93,7 @@ function stripBraces(s: string): string {
 }
 
 /** \cite / \citep / \citet */
-export function renderCite(n: CommandNode, ctx: Ctx): Out {
+function renderCite(n: CommandNode, ctx: Ctx): Out {
   const keys = plain(n.args[0]).split(',').map((s) => s.trim()).filter(Boolean);
   // 文献リストにないキーは LaTeX と同じく ?
   const labels = keys.map((k) => escapeHtml(ctx.bib.labels.get(k) ?? '?'));
@@ -84,7 +102,7 @@ export function renderCite(n: CommandNode, ctx: Ctx): Out {
 }
 
 /** \bibliography{a,b}：.bib から文献リストを作る */
-export function renderBibliography(n: CommandNode, ctx: Ctx): Out {
+function renderBibliography(n: CommandNode, ctx: Ctx): Out {
   const names = plain(n.args[0]).split(',').map((s) => s.trim()).filter(Boolean);
   const missing = names.filter((f) => !(f.replace(/\.bib$/, '') in (ctx.opts.bibFiles ?? {})));
   const items = ctx.bib.keys
@@ -97,7 +115,7 @@ export function renderBibliography(n: CommandNode, ctx: Ctx): Out {
 }
 
 /** thebibliography 環境 */
-export function renderTheBibliography(n: EnvNode, ctx: Ctx): Out {
+function renderTheBibliography(n: EnvNode, ctx: Ctx): Out {
   // \bibitem[ラベル]{キー} ごとに分ける
   const items: { key: string; nodes: Node[] }[] = [];
   for (const c of n.children) {
@@ -128,7 +146,7 @@ const CJK_NAME = /[぀-ヿ㐀-鿿]/;
 /** BibTeX の plain スタイルに近い形で 1 件を整形する */
 function formatEntry(e: BibEntry, ctx: Ctx): string {
   const f = e.fields;
-  const tex = (s: string | undefined) => (s ? renderInline(parse(s), ctx).trim() : '');
+  const tex = (s: string | undefined) => (s ? renderInline(parseFragment(s), ctx).trim() : '');
   const names = (s: string | undefined) => {
     const authors = splitAuthors(s);
     // 和文の名前は「姓 名」の順で、and を使わず読点相当のカンマで並べる（jplain 等と同じ）

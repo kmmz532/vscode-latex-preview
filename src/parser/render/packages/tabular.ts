@@ -1,7 +1,23 @@
-import type { Node } from '../parser';
-import { renderInline } from './blocks';
-import { nodesToSource, plain } from './text';
-import { block, Ctx, EnvNode, Out } from './types';
+import type { Node } from '../../parser';
+import { renderInline } from '../blocks';
+import { nodesToSource, plain } from '../text';
+import { block, Ctx, EnvNode, Out, Package } from '../types';
+
+/** tabular / tabularx / multirow / booktabs 相当。hline 等は renderTabular が行の分割時に解釈する */
+export const tabular: Package = {
+  commands: {
+    hline: { args: 0 },
+    cline: { args: 1 },
+    multicolumn: { args: 3 },
+    multirow: { args: 3 },
+  },
+  environments: {
+    tabular: { args: 1, render: renderTabular },
+    // tabular*{幅}{列指定} / tabularx{幅}{列指定}
+    'tabular*': { args: 2, render: renderTabular },
+    tabularx: { args: 2, render: renderTabular },
+  },
+};
 
 interface Column {
   align: 'left' | 'center' | 'right';
@@ -113,8 +129,7 @@ function splitRows(children: Node[]): Row[] {
 
 const isBlank = (nodes: Node[]) => nodes.every((n) => n.kind === 'text' && !n.value.trim());
 
-export function tabular(n: EnvNode, ctx: Ctx): Out {
-  // tabular*{幅}{列指定} / tabularx{幅}{列指定}
+function renderTabular(n: EnvNode, ctx: Ctx): Out {
   const spec = n.args[n.name === 'tabular' ? 0 : 1];
   const cols = parseColSpec(nodesToSource(spec));
   const rows = splitRows(n.children);

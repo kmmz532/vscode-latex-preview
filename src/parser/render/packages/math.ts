@@ -1,7 +1,6 @@
-import { Node, parse } from '../parser';
-import { renderInline } from './blocks';
-import { escapeHtml, parseKeyValues } from './text';
-import { block, Ctx, inline, Out } from './types';
+import type { Node } from '../../parser';
+import { escapeHtml } from '../text';
+import { block, Ctx, inline, Out, Package } from '../types';
 
 /** 番号付きの数式環境と、KaTeX に渡すときの番号なし版（番号は \tag で自前で振る） */
 const MATH_ENV_KATEX: Record<string, string | undefined> = {
@@ -15,6 +14,14 @@ const MATH_ENV_KATEX: Record<string, string | undefined> = {
   multline: 'gather*',
 };
 const NUMBERED_MATH = new Set(['equation', 'align', 'eqnarray', 'gather', 'multline']);
+
+/** 数式環境（amsmath 相当）。中身はトークナイザが math ノードとして切り出し、renderMath で描画する */
+export const math: Package = {
+  mathEnvironments: [
+    'equation', 'equation*', 'align', 'align*', 'gather', 'gather*',
+    'multline', 'multline*', 'eqnarray', 'eqnarray*', 'displaymath', 'math',
+  ],
+};
 
 export function renderMath(n: Extract<Node, { kind: 'math' }>, ctx: Ctx): Out {
   const attr = `class="math" data-display="${n.display ? 1 : 0}"`;
@@ -40,26 +47,6 @@ export function renderMath(n: Extract<Node, { kind: 'math' }>, ctx: Ctx): Out {
   });
   const src = kenv ? `\\begin{${kenv}}${out.join('\\\\')}\\end{${kenv}}` : out.join('');
   return block(`<div ${attr} data-line="${n.line}">${escapeHtml(src)}</div>`);
-}
-
-export function renderVerb(n: Extract<Node, { kind: 'verb' }>, ctx: Ctx): Out {
-  // verbatim* / \verb* は空白を ␣ で見せる
-  const visible = (s: string) => (n.env?.endsWith('*') ? s.replace(/ /g, '␣') : s);
-  if (!n.display) {
-    return inline(`<code class="verb">${escapeHtml(visible(n.text))}</code>`);
-  }
-  // lstlisting / minted の key=value オプションから caption と label を拾う
-  const opts = parseKeyValues(n.opt ?? '');
-  let caption = '';
-  if (opts.caption !== undefined) {
-    ctx.counters.listing++;
-    ctx.currentLabel = String(ctx.counters.listing);
-    caption = `<div class="caption">Listing ${ctx.counters.listing}: ${renderInline(parse(opts.caption), ctx)}</div>`;
-  }
-  if (opts.label) {
-    ctx.collected.set(opts.label, ctx.currentLabel);
-  }
-  return block(`<figure class="listing" data-line="${n.line}">${caption}<pre class="verbatim">${escapeHtml(visible(n.text))}</pre></figure>`);
 }
 
 /** 数式中の \label{...} を取り除き、直前の番号に対応付ける（KaTeX は \label 非対応） */

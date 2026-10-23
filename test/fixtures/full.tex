@@ -1,0 +1,33 @@
+\documentclass[twocolumn]{jsarticle}
+\newcommand{\R}{\mathbb{R}}
+\title{T}\author{A \and B}\date{D}
+\begin{document}
+\maketitle
+\begin{abstract}abs \textbf{b} --- ``q''\end{abstract}
+\section{Intro}\label{sec:i}
+See \ref{sec:i}, \eqref{eq:a}, \ref{fig:x}, \ref{tab:t}, \ref{lst:a}, \cite{knuth,lamport}, \cite[p.~3]{x}.
+\begin{equation}a=b\label{eq:a}\end{equation}
+\begin{align}x&=1\\y&=2\nonumber\\z&=3\tag{*}\label{eq:z}\end{align}
+\begin{multline}a\\b\\c\end{multline}
+$\R^n$ \verb*|a b| \unknowncmd[o]{x}
+\begin{lstlisting}[caption={A, B},label=lst:a]
+code here
+\end{lstlisting}
+\begin{figure*}\centering\includegraphics[width=0.5\linewidth,angle=90]{img}\caption{Fig}\label{fig:x}\end{figure*}
+\begin{figure}\includegraphics[scale=0.5]{missing.eps}\end{figure}
+\begin{table}\caption{Tab}\label{tab:t}
+\begin{tabular}{|l|*{2}{c}|p{2cm}|}\hline
+\multicolumn{2}{|c|}{h} & \multirow{2}{*}{m} & d\\\cline{1-2}
+a & b & & e\\\hline
+\end{tabular}\end{table}
+\subsection*{S}\subsubsection{SS}\paragraph{P}
+\begin{itemize}\item a\item[x] b\end{itemize}
+\begin{enumerate}\item a\end{enumerate}
+\begin{description}\item[k] v\end{description}
+\begin{center}c\end{center}\begin{foo}bar\end{foo}
+\twocolumn[\section*{Span}]
+\onecolumn
+\noindent text\footnote{f} \url{http://x} \LaTeX\ \textsc{sc}
+\bibliographystyle{alpha}
+\bibliography{refs,missing}
+\end{document}
