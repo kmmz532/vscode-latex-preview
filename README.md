@@ -1,4 +1,4 @@
-# LaTeX Preview
+# Simple LaTeX Preview
 LaTeXを簡易プレビューするVSCode拡張機能<br />
 既存の拡張機能とは異なり、Web版（vscode.dev / github.dev）でも動作する
 

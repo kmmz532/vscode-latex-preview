@@ -1,6 +1,6 @@
 {
-  "name": "latex-preview",
-  "displayName": "LaTeX Preview",
+  "name": "simple-latex-preview",
+  "displayName": "Simple LaTeX Preview",
   "description": "Lightweight LaTeX preview that also works in VS Code for the Web",
   "version": "0.0.1",
   "license": "MIT",
