@@ -5,10 +5,18 @@ export interface BibEntry {
   fields: Record<string, string>;
 }
 
+const MONTHS: Record<string, string> = Object.fromEntries(
+  ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map((m) => [
+    m.slice(0, 3).toLowerCase(),
+    m,
+  ])
+);
+
 /** 簡易 BibTeX パーサ。壊れたエントリは読み飛ばす */
 export function parseBib(src: string): Map<string, BibEntry> {
   const entries = new Map<string, BibEntry>();
-  const strings: Record<string, string> = {};
+  // 標準スタイルが定義している月の略称（month = mar）
+  const strings: Record<string, string> = { ...MONTHS };
   let i = 0;
 
   const skipWs = () => {

@@ -60,7 +60,7 @@ export function prepareBib(nodes: Node[], bibFiles: Record<string, string>): Bib
   // thebibliography があればその順番とラベルが優先
   if (bibitems.length) {
     bibitems.forEach((b, i) => labels.set(b.key, b.label ?? String(i + 1)));
-    return { entries, labels, keys: bibitems.map((b) => b.key) };
+    return { entries, labels, keys: bibitems.map((b) => b.key), style };
   }
 
   let keys = cited.filter((k) => entries.has(k));
@@ -72,7 +72,7 @@ export function prepareBib(nodes: Node[], bibFiles: Record<string, string>): Bib
   }
   const alpha = /alpha/i.test(style);
   keys.forEach((k, i) => labels.set(k, alpha ? alphaLabel(entries.get(k)!) : String(i + 1)));
-  return { entries, labels, keys };
+  return { entries, labels, keys, style };
 }
 
 function sortKey(e: BibEntry): string {
@@ -143,22 +143,60 @@ function bibItem(label: string, body: string, key: string): string {
 
 const CJK_NAME = /[぀-ヿ㐀-鿿]/;
 
-/** BibTeX の plain スタイルに近い形で 1 件を整形する */
+/**
+ * スタイルの系統。書式の違いだけを見分ける
+ * - plain：plain / unsrt / alpha / abbrv（BibTeX 標準）
+ * - japanese：jplain / junsrt / jalpha / jabbrv（Vol. / No. / pp. と年で終わる。和文の書名は強調しない）
+ * - ieee：ieeetr / IEEEtran（名は頭文字、題目は引用符、vol. / no. / pp.）
+ */
+type StyleFamily = 'plain' | 'japanese' | 'ieee';
+
+function styleFamily(style: string): StyleFamily {
+  if (/^j(plain|unsrt|alpha|abbrv)/i.test(style)) {
+    return 'japanese';
+  }
+  if (/^(ieeetr|IEEEtran|ieee)/i.test(style)) {
+    return 'ieee';
+  }
+  return 'plain';
+}
+
+/** 名を頭文字にする（Donald E. → D. E.）。abbrv 系と IEEE 系 */
+function initials(first: string): string {
+  return first
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.split('-').map((p) => (/^[{\\]/.test(p) ? p : `${p[0]}.`)).join('-'))
+    .join(' ');
+}
+
+/** BibTeX のスタイルに近い形で 1 件を整形する */
 function formatEntry(e: BibEntry, ctx: Ctx): string {
   const f = e.fields;
+  const family = styleFamily(ctx.bib.style);
+  const abbreviate = family === 'ieee' || /abbrv/i.test(ctx.bib.style);
   const tex = (s: string | undefined) => (s ? renderInline(parseFragment(s), ctx).trim() : '');
+  const isJa = (s: string | undefined) => !!s && CJK_NAME.test(s);
   const names = (s: string | undefined) => {
     const authors = splitAuthors(s);
     // 和文の名前は「姓 名」の順で、and を使わず読点相当のカンマで並べる（jplain 等と同じ）
     if (authors.some((a) => CJK_NAME.test(a.last + a.first))) {
       return authors.map((a) => tex(a.first ? `${a.last} ${a.first}` : a.last)).join(', ');
     }
-    const list = authors.map((a) => tex(a.first ? `${a.first} ${a.last}` : a.last));
+    const list = authors.map((a) => {
+      const first = abbreviate ? initials(a.first) : a.first;
+      return tex(first ? `${first} ${a.last}` : a.last);
+    });
     if (list.length <= 2) {
       return list.join(' and ');
     }
     return `${list.slice(0, -1).join(', ')}, and ${list[list.length - 1]}`;
   };
+  // 書名・雑誌名の強調。jplain 系は和文の名前を強調しない
+  const em = (s: string | undefined) => (family === 'japanese' && isJa(s) ? tex(s) : `<em>${tex(s)}</em>`);
+  const pages = (p: string) => tex(p.replace(/-+/, '--'));
+  const pp = (p: string) => (/[-,+]/.test(p) ? 'pp. ' : 'p. ') + pages(p);
+
   const parts: string[] = [];
   const authors = names(f.author) || (f.editor ? `${names(f.editor)}, editor${splitAuthors(f.editor).length > 1 ? 's' : ''}` : '');
   if (authors) {
@@ -166,27 +204,50 @@ function formatEntry(e: BibEntry, ctx: Ctx): string {
   }
   const isBookLike = e.type === 'book' || e.type === 'proceedings' || e.type === 'phdthesis' || e.type === 'mastersthesis';
   if (f.title) {
-    parts.push(isBookLike ? `<em>${tex(f.title)}</em>` : tex(f.title));
+    if (family === 'ieee' && !isBookLike) {
+      // IEEE は題目を引用符で囲み、後ろの区切りは引用符の内側のカンマ
+      parts.push(`“${tex(f.title)},”`);
+    } else {
+      parts.push(isBookLike ? em(f.title) : tex(f.title));
+    }
   }
 
   const where: string[] = [];
   if (e.type === 'article') {
-    let journal = f.journal ? `<em>${tex(f.journal)}</em>` : '';
-    if (f.volume) {
-      journal += `${journal ? ', ' : ''}${tex(f.volume)}${f.number ? `(${tex(f.number)})` : ''}`;
+    if (f.journal) {
+      where.push(em(f.journal));
     }
-    if (f.pages) {
-      journal += `${f.volume ? ':' : journal ? ', ' : ''}${tex(f.pages.replace(/-+/, '--'))}`;
-    }
-    if (journal) {
-      where.push(journal);
+    if (family === 'plain') {
+      // plain：Journal, 1(2):1--10
+      let vol = '';
+      if (f.volume) {
+        vol = `${tex(f.volume)}${f.number ? `(${tex(f.number)})` : ''}`;
+      }
+      if (f.pages) {
+        vol += `${f.volume ? ':' : ''}${pages(f.pages)}`;
+      }
+      if (vol) {
+        where.push(vol);
+      }
+    } else {
+      // jplain：Vol. 1, No. 2, pp. 1--10 / IEEE：vol. 1, no. 2, pp. 1--10
+      const ieee = family === 'ieee';
+      if (f.volume) {
+        where.push(`${ieee ? 'vol.' : 'Vol.'}&nbsp;${tex(f.volume)}`);
+      }
+      if (f.number) {
+        where.push(`${ieee ? 'no.' : 'No.'}&nbsp;${tex(f.number)}`);
+      }
+      if (f.pages) {
+        where.push(pp(f.pages));
+      }
     }
   } else if (e.type === 'inproceedings' || e.type === 'conference' || e.type === 'incollection') {
     if (f.booktitle) {
-      where.push(`In <em>${tex(f.booktitle)}</em>`);
+      where.push(`${family === 'ieee' ? 'in' : 'In'} ${em(f.booktitle)}`);
     }
     if (f.pages) {
-      where.push(`pp. ${tex(f.pages.replace(/-+/, '--'))}`);
+      where.push(family === 'plain' ? `pages ${pages(f.pages)}` : pp(f.pages));
     }
   } else if (e.type === 'phdthesis' || e.type === 'mastersthesis') {
     where.push(e.type === 'phdthesis' ? 'PhD thesis' : "Master's thesis");
@@ -196,7 +257,9 @@ function formatEntry(e: BibEntry, ctx: Ctx): string {
       where.push(tex(f[k]));
     }
   }
-  const date = [f.month, f.year].filter(Boolean).map((s) => tex(s)).join(' ');
+  // 和文の文献は月を付けず年だけ（jplain 系）
+  const month = family === 'japanese' && isJa(f.title) ? undefined : f.month;
+  const date = [month, f.year].filter(Boolean).map((s) => tex(s)).join(' ');
   if (date) {
     where.push(date);
   }
@@ -209,5 +272,10 @@ function formatEntry(e: BibEntry, ctx: Ctx): string {
   if (f.note) {
     parts.push(tex(f.note));
   }
-  return parts.map((p) => (/[.。]$/.test(p.replace(/<[^>]+>/g, '')) ? p : p + '.')).join(' ');
+  // 各部を句点で区切る。IEEE は題目（引用符の内側のカンマ）以外をカンマでつなぎ、最後だけ句点
+  const ends = (p: string) => /[.。,”]$/.test(p.replace(/<[^>]+>/g, ''));
+  if (family === 'ieee') {
+    return parts.map((p, i) => (ends(p) ? p : p + (i === parts.length - 1 ? '.' : ','))).join(' ');
+  }
+  return parts.map((p) => (ends(p) ? p : p + '.')).join(' ');
 }

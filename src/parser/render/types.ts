@@ -27,6 +27,8 @@ export interface BibState {
   labels: Map<string, string>;
   /** 文献リストに出すキー（並び順どおり） */
   keys: string[];
+  /** \bibliographystyle の名前（plain, junsrt など） */
+  style: string;
 }
 
 export interface Meta {
