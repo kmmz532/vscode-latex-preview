@@ -1,6 +1,8 @@
 # Simple LaTeX Preview
 LaTeXを簡易プレビューするVSCode拡張機能<br />
-既存の拡張機能とは異なり、Web版（vscode.dev / github.dev）でも動作する
+既存のLaTeX拡張機能とは異なり、Web版（vscode.dev / github.dev）でも動作する
+
+- https://marketplace.visualstudio.com/items?itemName=kmmz1127.simple-latex-preview
 
 ## 使い方
 1. `.tex` ファイルを開く
