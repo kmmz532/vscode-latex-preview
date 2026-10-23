@@ -167,11 +167,21 @@ interface PageInfo {
   end: number;
 }
 
+/** ページ分割の結果 */
+interface Layout {
+  /** ページを並べた .doc.paged（画面に出ているもの） */
+  doc: HTMLElement;
+  /** 文書クラスの寸法・マクロ。変わったら前回の分割は使えない */
+  docKey: string;
+  blocks: Block[];
+  pages: PageInfo[];
+}
+
 /**
- * 前回のページ分割の結果（.doc.paged の出現順）。
- * 数千行の文書では分割のたびのレイアウト計算が重いので、変わっていない部分のページは使い回す
+ * 前回のページ分割の結果。数千行の文書では全ページのレイアウト計算が重いので、
+ * 次の更新では変わっていないページを DOM ごと画面に残し、変わったところだけ組み直す
  */
-let layouts: { docKey: string; blocks: Block[]; pages: PageInfo[] }[] = [];
+let layout: Layout | undefined;
 
 /** .doc.paged の中身をブロックに分ける。数式を描画する前に呼ぶ（key に KaTeX の出力を含めない） */
 function collectBlocks(doc: HTMLElement): Block[] {
@@ -194,11 +204,10 @@ function collectBlocks(doc: HTMLElement): Block[] {
  * .doc.paged の中身を \textheight ごとのページに分ける。
  * ブロックを 1 つずつ入れ、あふれたら（2 段組なら 3 段目にはみ出したら）次のページへ送る。
  * 段落（<p>）はあふれた行の頭で分け、残りを次のページへ送る（段の間はブラウザが分割する）。
- * 前回の結果（layouts[slot]）と比べ、先頭から変わっていないページと、
- * 変更箇所の後でページの始まりが前回と揃ったところから先は、前回のページをそのまま使う
+ * prev があれば、その doc の上で組み直す。先頭から変わっていないページと、
+ * 変更箇所の後でページの始まりが前回と揃ったところから先は、前回のページをそのまま残す
  */
-function paginate(doc: HTMLElement, blocks: Block[], docKey: string, slot: number) {
-  const prev = layouts[slot]?.docKey === docKey ? layouts[slot] : undefined;
+function paginate(doc: HTMLElement, blocks: Block[], docKey: string, prev?: Layout): Layout {
   const old = prev?.blocks ?? [];
   const n = blocks.length;
   const m = old.length;
@@ -237,12 +246,17 @@ function paginate(doc: HTMLElement, blocks: Block[], docKey: string, slot: numbe
     }
     blocks[start].pieces = blocks[start].pieces.filter((x) => !rest.includes(x));
   }
-  doc.replaceChildren(...pages.map((p) => p.el));
+  // 組み直すページは前回の r ページ目の手前に入れていき、最後に要らなくなった前回のページを外す
+  const anchor = oldPages[r]?.el ?? null;
+  if (!prev) {
+    doc.replaceChildren();
+  }
+  let dropUntil = oldPages.length;
 
   const newPage = (i: number, split: boolean): HTMLElement => {
     const page = document.createElement('div');
     page.className = 'page';
-    doc.appendChild(page);
+    doc.insertBefore(page, anchor);
     pages.push({ el: page, start: i, split, end: i });
     if (!blocks[i].two) {
       return page;
@@ -253,15 +267,15 @@ function paginate(doc: HTMLElement, blocks: Block[], docKey: string, slot: numbe
     return cols;
   };
   const shift = n - m;
-  /** 前回の q ページ目以降をつなぎ、ブロック from 以降を前回のものに差し替える */
+  /** 前回の q ページ目以降を残し、ブロック from 以降を前回のものに差し替える */
   const adopt = (q: number, from: number) => {
     for (let j = from; j < n; j++) {
       reuseBlock(blocks[j], old[j - shift]);
     }
     for (const p of oldPages.slice(q)) {
-      doc.appendChild(p.el);
       pages.push({ ...p, start: p.start + shift, end: p.end + shift });
     }
+    dropUntil = q;
   };
   // 変更箇所より後で新しいページを始めるところで、前回も同じところからページが始まっていれば、以降は前回のまま
   const resync = (i: number): boolean => {
@@ -347,7 +361,10 @@ function paginate(doc: HTMLElement, blocks: Block[], docKey: string, slot: numbe
     }
     pages[pages.length - 1].end = i;
   }
-  layouts[slot] = { docKey, blocks, pages };
+  for (const p of oldPages.slice(r, dropUntil)) {
+    p.el.remove();
+  }
+  return { doc, docKey, blocks, pages };
 }
 
 /** 前回分割したブロックの断片を今回のものとして使う（行番号だけ今回の値に直す） */
@@ -507,14 +524,10 @@ window.addEventListener('message', async (event: MessageEvent<ToWebview>) => {
   if (msg.type === 'update') {
     const version = ++updateVersion;
     const scrollY = window.scrollY;
-    const T0 = performance.now(); const lap = (l) => console.log(l, (performance.now() - T0).toFixed(0)); 
     content.innerHTML = msg.html;
-    lap("innerHTML"); void document.body.offsetHeight; lap("layoutAll");
     const docs = Array.from(content.querySelectorAll<HTMLElement>('.doc.paged'));
     const blocks = docs.map(collectBlocks);
-    lap("collect");
     renderMath(content, msg.macros);
-    lap("math");
     // 画像の大きさが決まってからページ分割する
     await Promise.all(Array.from(content.querySelectorAll('img')).map((img) => img.decode().catch(() => undefined)));
     if (version !== updateVersion) {
@@ -526,7 +539,6 @@ window.addEventListener('message', async (event: MessageEvent<ToWebview>) => {
     // 文書クラスの寸法やマクロが変わったら前回の分割は使えない
     const macrosKey = JSON.stringify(msg.macros);
     docs.forEach((doc, k) => paginate(doc, blocks[k], `${doc.className}|${doc.getAttribute('style')}|${macrosKey}`, k));
-    lap("paginate"); void document.body.offsetHeight; lap("layoutAfter");
     layouts.length = docs.length;
     content.style.zoom = zoom;
     // 段組みの有無で最小幅が変わるので再計算
