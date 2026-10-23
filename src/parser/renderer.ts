@@ -29,7 +29,13 @@ interface Ctx {
   meta: Meta;
   /** 日本語文書クラス（jsarticle 等）なら「図」「表」、それ以外は Figure / Table */
   japanese: boolean;
-  counters: { figure: number; table: number; section: number[] };
+  counters: { figure: number; table: number; section: number[]; equation: number };
+  /** \ref で引く番号（前回の描画パスで集めたもの。前方参照のため 2 回描画する） */
+  labels: Map<string, string>;
+  /** 今回の描画パスで集めた \label */
+  collected: Map<string, string>;
+  /** 直前に振られた番号（LaTeX の \@currentlabel） */
+  currentLabel: string;
   /** 描画中の float 環境（\caption の番号付けに使う） */
   float?: 'figure' | 'table';
   bib: BibState;
@@ -63,23 +69,34 @@ export function renderDocument(src: string, opts: RenderOptions): RenderResult {
     return { html: `<pre class="error">Parse error: ${escapeHtml(String(e))}</pre>`, macros: {} };
   }
   const layout = computeLayout(nodes, plain);
-  const ctx: Ctx = {
-    opts,
-    meta: {},
-    japanese: layout.japanese,
-    counters: { figure: 0, table: 0, section: [0, 0, 0] },
-    bib: prepareBib(nodes, opts.bibFiles ?? {}),
-  };
-  collectMeta(nodes, ctx.meta);
+  const meta: Meta = {};
+  collectMeta(nodes, meta);
+  const bib = prepareBib(nodes, opts.bibFiles ?? {});
   // \begin{document} があればその中身だけを描画（プリアンブル自体は描画しない）
   const doc = nodes.find((n) => n.kind === 'env' && n.name === 'document');
   const body = doc && doc.kind === 'env' ? doc.children : nodes;
+  const renderPass = (labels: Map<string, string>) => {
+    const ctx: Ctx = {
+      opts,
+      meta,
+      japanese: layout.japanese,
+      counters: { figure: 0, table: 0, section: [0, 0, 0], equation: 0 },
+      labels,
+      collected: new Map(),
+      currentLabel: '',
+      bib,
+    };
+    return { html: renderColumns(body, layout.twoColumn, ctx), collected: ctx.collected };
+  };
+  // 1 回目で \label を集め、2 回目でその番号を使って \ref を埋める
+  const first = renderPass(new Map());
+  const inner = first.collected.size ? renderPass(first.collected).html : first.html;
   const style =
     `--fs:${layout.fontSize};--lh:${layout.lineHeight};--indent:${layout.parindent};` +
     `--textwidth:${layout.textwidth};--textheight:${layout.textheight};--colsep:${layout.columnsep}`;
   // \documentclass がある完全な文書だけページ分割する（断片はそのまま流す）
   const paged = nodes.some((n) => n.kind === 'command' && n.name === 'documentclass') ? ' paged' : '';
-  const html = `<div class="doc ${layout.japanese ? 'ja' : 'en'}${paged}" style="${style}">${renderColumns(body, layout.twoColumn, ctx)}</div>`;
+  const html = `<div class="doc ${layout.japanese ? 'ja' : 'en'}${paged}" style="${style}">${inner}</div>`;
   return { html, macros };
 }
 
@@ -175,7 +192,7 @@ function renderNode(n: Node, ctx: Ctx): Out {
     case 'group':
       return inline(renderInline(n.children, ctx));
     case 'math':
-      return renderMath(n.tex, n.display, n.env, n.line);
+      return renderMath(n, ctx);
     case 'parbreak':
       return NOTHING;
     case 'command': {
@@ -189,17 +206,79 @@ function renderNode(n: Node, ctx: Ctx): Out {
   }
 }
 
-function renderMath(tex: string, display: boolean, env: string | undefined, line: number): Out {
-  // align 等は KaTeX 側で環境ごと描画させる
-  let src = tex;
-  if (env && env !== 'displaymath' && env !== 'math' && !env.startsWith('equation')) {
-    const name = env.startsWith('eqnarray') ? 'align' + (env.endsWith('*') ? '*' : '') : env;
-    src = `\\begin{${name}}${tex}\\end{${name}}`;
+/** 番号付きの数式環境と、KaTeX に渡すときの番号なし版（番号は \tag で自前で振る） */
+const MATH_ENV_KATEX: Record<string, string | undefined> = {
+  equation: undefined,
+  displaymath: undefined,
+  math: undefined,
+  align: 'align*',
+  eqnarray: 'align*',
+  gather: 'gather*',
+  // KaTeX は multline 非対応なので gather で代用
+  multline: 'gather*',
+};
+const NUMBERED_MATH = new Set(['equation', 'align', 'eqnarray', 'gather', 'multline']);
+
+function renderMath(n: Extract<Node, { kind: 'math' }>, ctx: Ctx): Out {
+  const attr = `class="math" data-display="${n.display ? 1 : 0}"`;
+  if (!n.display) {
+    return inline(`<span ${attr}>${escapeHtml(stripLabels(n.tex, ctx))}</span>`);
   }
-  const attr = `class="math" data-display="${display ? 1 : 0}"`;
-  return display
-    ? block(`<div ${attr} data-line="${line}">${escapeHtml(src)}</div>`)
-    : inline(`<span ${attr}>${escapeHtml(src)}</span>`);
+  const base = (n.env ?? '').replace(/\*$/, '');
+  const numbered = !!n.env && !n.env.endsWith('*') && NUMBERED_MATH.has(base);
+  const kenv = MATH_ENV_KATEX[base];
+  // 行ごとに番号を振る環境は \\ で分ける（multline は最後の行だけに番号）
+  const rows = kenv ? splitMathRows(n.tex) : [n.tex];
+  const out = rows.map((row, i) => {
+    const suppressed = /\\(nonumber|notag)(?![a-zA-Z])/.test(row) || (base === 'multline' && i < rows.length - 1);
+    const userTag = /\\tag\*?\{([^}]*)\}/.exec(row);
+    let tag = '';
+    if (userTag) {
+      ctx.currentLabel = userTag[1];
+    } else if (numbered && !suppressed) {
+      ctx.currentLabel = String(++ctx.counters.equation);
+      tag = ` \\tag{${ctx.currentLabel}}`;
+    }
+    return stripLabels(row.replace(/\\(nonumber|notag)(?![a-zA-Z])/g, ''), ctx) + tag;
+  });
+  const src = kenv ? `\\begin{${kenv}}${out.join('\\\\')}\\end{${kenv}}` : out.join('');
+  return block(`<div ${attr} data-line="${n.line}">${escapeHtml(src)}</div>`);
+}
+
+/** 数式中の \label{...} を取り除き、直前の番号に対応付ける（KaTeX は \label 非対応） */
+function stripLabels(tex: string, ctx: Ctx): string {
+  return tex.replace(/\\label\s*\{([^}]*)\}/g, (_, key: string) => {
+    ctx.collected.set(key.trim(), ctx.currentLabel);
+    return '';
+  });
+}
+
+/** 数式を最上位の \\ で行に分ける（{...} や \begin...\end の中は分けない） */
+function splitMathRows(tex: string): string[] {
+  const rows: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < tex.length; i++) {
+    const c = tex[i];
+    if (c === '\\') {
+      if (tex.startsWith('\\begin', i)) {
+        depth++;
+      } else if (tex.startsWith('\\end', i)) {
+        depth--;
+      } else if (tex[i + 1] === '\\' && depth === 0) {
+        rows.push(tex.slice(start, i));
+        start = i + 2;
+      }
+      i++;
+    } else if (c === '{') {
+      depth++;
+    } else if (c === '}') {
+      depth--;
+    }
+  }
+  rows.push(tex.slice(start));
+  // 末尾の \\ による空行は捨てる
+  return rows.filter((r, i) => i < rows.length - 1 || r.trim() || rows.length === 1);
 }
 
 function renderText(s: string): string {
@@ -247,7 +326,8 @@ const heading = (level: number, depth?: number): CommandHandler => (n, ctx) => {
     const c = ctx.counters.section;
     c[depth]++;
     c.fill(0, depth + 1);
-    num = `<span class="secnum">${c.slice(0, depth + 1).join('.')}</span>`;
+    ctx.currentLabel = c.slice(0, depth + 1).join('.');
+    num = `<span class="secnum">${ctx.currentLabel}</span>`;
   }
   return block(`<h${level} data-line="${n.line}">${num}${renderInline(n.args[0], ctx) || '&nbsp;'}</h${level}>`);
 };
@@ -312,9 +392,14 @@ const COMMANDS: Record<string, CommandHandler> = {
   citep: renderCite,
   citet: renderCite,
   nocite: ignore,
-  ref: (n) => inline(`<span class="ref">${escapeHtml(plain(n.args[0]))}</span>`),
-  eqref: (n) => inline(`<span class="ref">(${escapeHtml(plain(n.args[0]))})</span>`),
-  label: ignore,
+  // 未定義のラベルは LaTeX と同じく ??
+  ref: (n, ctx) => inline(`<span class="ref">${escapeHtml(ctx.labels.get(plain(n.args[0]).trim()) ?? '??')}</span>`),
+  eqref: (n, ctx) => inline(`<span class="ref">(${escapeHtml(ctx.labels.get(plain(n.args[0]).trim()) ?? '??')})</span>`),
+  pageref: () => inline('<span class="ref">??</span>'),
+  label: (n, ctx) => {
+    ctx.collected.set(plain(n.args[0]).trim(), ctx.currentLabel);
+    return NOTHING;
+  },
   bibliography: (n, ctx) => {
     const names = plain(n.args[0]).split(',').map((s) => s.trim()).filter(Boolean);
     const missing = names.filter((f) => !(f.replace(/\.bib$/, '') in (ctx.opts.bibFiles ?? {})));
@@ -333,6 +418,7 @@ const COMMANDS: Record<string, CommandHandler> = {
       return inline(renderInline(n.args[0], ctx));
     }
     const num = ++ctx.counters[ctx.float];
+    ctx.currentLabel = String(num);
     const name = ctx.float === 'figure' ? (ctx.japanese ? '図' : 'Figure') : ctx.japanese ? '表' : 'Table';
     const sep = ctx.japanese ? '　' : ': ';
     return block(`<div class="caption" data-line="${n.line}">${name}${ctx.japanese ? '' : ' '}${num}${sep}${renderInline(n.args[0], ctx)}</div>`);

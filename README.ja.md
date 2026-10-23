@@ -23,7 +23,8 @@ LaTeXを簡易プレビューするVSCode拡張機能<br />
 - 表: `tabular` `tabular*` `tabularx`（`l` `c` `r` `p{幅}`、縦線 `|`、`\hline`、`\multicolumn`）
 - マクロ: `\newcommand` `\renewcommand` `\providecommand` `\def`（引数・オプション引数の既定値に対応。数式中でも使える）
 - 参考文献: `\bibliography` で `.tex` と同じフォルダの `.bib` を読み込む。`\bibliographystyle` で並び順を切り替え（`unsrt` / `junsrt` は引用順、それ以外は著者名順、`alpha` はラベル形式）。`thebibliography` / `\bibitem`、`\cite` / `\nocite` にも対応
-- `\ref` の簡易表示
+- 数式番号: `equation` `align` `gather` `multline` に自動で番号を振る（`\nonumber` `\notag` `\tag` に対応）
+- 相互参照: `\label` と `\ref` / `\eqref`（節・図・表・数式。後ろで定義したラベルも参照できる）
 - 文書クラス（`jsarticle` / `article` 系）に合わせた文字サイズ・行送り・字下げ
 - `twocolumn` による 2 段組と、`\textheight` に基づくページ分割
 - プリアンブルの `\setlength`（`\textwidth` `\textheight` `\columnsep` `\parindent`）

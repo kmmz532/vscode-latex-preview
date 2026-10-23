@@ -23,7 +23,8 @@ Use the buttons at the top right of the preview to zoom out / in (`−` / `+`), 
 - Tables: `tabular` `tabular*` `tabularx` (`l` `c` `r` `p{width}`, vertical rules `|`, `\hline`, `\multicolumn`)
 - Macros: `\newcommand` `\renewcommand` `\providecommand` `\def` (with arguments and default optional arguments; also usable inside math)
 - Bibliography: `\bibliography` reads `.bib` files in the same folder as the `.tex` file; `\bibliographystyle` decides the order (citation order for `unsrt` / `junsrt`, by author otherwise; `alpha` labels). `thebibliography` / `\bibitem` and `\cite` / `\nocite` are also supported
-- Basic display of `\ref`
+- Equation numbering for `equation` / `align` / `gather` / `multline` (`\nonumber` / `\notag` / `\tag` supported)
+- Cross references: `\label` with `\ref` / `\eqref` (sections, figures, tables and equations; forward references work)
 - Font size, line spacing and indentation based on the document class (`jsarticle` / `article` families)
 - Two-column layout with `twocolumn`, and page breaks based on `\textheight`
 - `\setlength` in the preamble (`\textwidth` `\textheight` `\columnsep` `\parindent`)
