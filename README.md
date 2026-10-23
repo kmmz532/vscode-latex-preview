@@ -20,7 +20,8 @@ Use the buttons at the top right of the preview to zoom out / in (`−` / `+`), 
 - Text styles: `\textbf` `\textit` `\emph` `\texttt` `\underline`, etc.
 - Lists: `itemize` `enumerate` `description`
 - `figure` / `table` with `\caption` (images are shown as a placeholder with the file name)
-- Tables: `tabular` `tabular*` `tabularx` (`l` `c` `r` `p{width}`, vertical rules `|`, `\hline`, `\multicolumn`)
+- Tables: `tabular` `tabular*` `tabularx` (`l` `c` `r` `p{width}`, vertical rules `|`, `\hline`, `\cline`, `\multicolumn`, `\multirow`)
+- Code: `verbatim` `Verbatim` `lstlisting` (with `caption` / `label`) `minted`, inline `\verb` / `\lstinline` (no syntax highlighting)
 - Macros: `\newcommand` `\renewcommand` `\providecommand` `\def` (with arguments and default optional arguments; also usable inside math)
 - Bibliography: `\bibliography` reads `.bib` files in the same folder as the `.tex` file; `\bibliographystyle` decides the order (citation order for `unsrt` / `junsrt`, by author otherwise; `alpha` labels). `thebibliography` / `\bibitem` and `\cite` / `\nocite` are also supported
 - Equation numbering for `equation` / `align` / `gather` / `multline` (`\nonumber` / `\notag` / `\tag` supported)
@@ -39,7 +40,7 @@ Unsupported commands do not cause errors; they are shown as dimmed source text.
 
 ## Limitations
 - Paragraphs are not split across pages
-- Image loading, `\input` / `\include`, `\cline`, `\multirow`, etc. are not supported
+- Image loading and `\input` / `\include` are not supported
 - `\def` with delimited parameters (e.g. `\def\foo#1.{...}`) is not supported
 - Default dimensions are approximations of each document class
 - Bibliography entries are formatted in a simplified `plain`-like style regardless of `\bibliographystyle`

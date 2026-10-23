@@ -6,13 +6,14 @@ export type Node =
   | { kind: 'command'; name: string; opt?: string; args: Node[][]; line: number }
   | { kind: 'env'; name: string; opt?: string; args: Node[][]; children: Node[]; line: number }
   | { kind: 'math'; tex: string; display: boolean; env?: string; line: number }
+  | { kind: 'verb'; text: string; display: boolean; env?: string; opt?: string; line: number }
   | { kind: 'parbreak'; line: number };
 
 /** 必須引数の数。未登録コマンドは後続の {...} をすべて引数として取る */
 const ARITY: Record<string, number> = {
   item: 0, maketitle: 0, today: 0, LaTeX: 0, TeX: 0, centering: 0, noindent: 0,
   newpage: 0, clearpage: 0, onecolumn: 0, twocolumn: 0, tableofcontents: 0, hline: 0, par: 0, '\\': 0,
-  multicolumn: 3, href: 2, setlength: 2, setcounter: 2, addtolength: 2,
+  multicolumn: 3, multirow: 3, cline: 1, href: 2, setlength: 2, setcounter: 2, addtolength: 2,
 };
 
 /** 環境ごとの必須引数の数 */
@@ -96,6 +97,8 @@ class Parser {
         return { kind: 'parbreak', line: t.line };
       case 'math':
         return { kind: 'math', tex: t.tex, display: t.display, env: t.env, line: t.line };
+      case 'verb':
+        return { kind: 'verb', text: t.text, display: t.display, env: t.env, opt: t.opt, line: t.line };
       case 'lbrace':
         return { kind: 'group', children: this.parseGroupBody(), line: t.line };
       case 'rbrace':
@@ -372,6 +375,8 @@ function tokensToSource(tokens: Token[]): string {
           return '\n\n';
         case 'math':
           return t.env ? `\\begin{${t.env}}${t.tex}\\end{${t.env}}` : t.display ? `\\[${t.tex}\\]` : `$${t.tex}$`;
+        case 'verb':
+          return t.env ? `\\begin{${t.env}}\n${t.text}\n\\end{${t.env}}` : `\\verb|${t.text}|`;
       }
     })
     .join('');

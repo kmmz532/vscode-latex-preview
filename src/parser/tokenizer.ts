@@ -3,8 +3,12 @@ export type Token =
   | { type: 'lbrace'; line: number }
   | { type: 'rbrace'; line: number }
   | { type: 'math'; tex: string; display: boolean; env?: string; line: number }
+  | { type: 'verb'; text: string; display: boolean; env?: string; opt?: string; line: number }
   | { type: 'parbreak'; line: number }
   | { type: 'text'; value: string; line: number };
+
+/** 中身を解釈せずそのまま表示する環境 */
+const VERB_ENVS = new Set(['verbatim', 'verbatim*', 'Verbatim', 'lstlisting', 'minted', 'comment']);
 
 /** 数式として生のまま KaTeX に渡す環境 */
 export const MATH_ENVS = new Set([
@@ -92,6 +96,49 @@ export function tokenize(src: string): Token[] {
             advance(end + close.length);
             continue;
           }
+        }
+        if (m && VERB_ENVS.has(m[1])) {
+          const close = `\\end{${m[1]}}`;
+          let p = i + m[0].length;
+          // \begin{lstlisting}[caption=...] / \begin{minted}[opts]{lang} の引数
+          let opt: string | undefined;
+          const om = /^\[([^\]\n]*)\]/.exec(src.slice(p));
+          if (om) {
+            opt = om[1];
+            p += om[0].length;
+          }
+          if (m[1] === 'minted') {
+            const lm = /^\{([^}]*)\}/.exec(src.slice(p));
+            if (lm) {
+              opt = (opt ? opt + ',' : '') + `language=${lm[1]}`;
+              p += lm[0].length;
+            }
+          }
+          const end = src.indexOf(close, p);
+          if (end >= 0) {
+            flushText();
+            // \begin{...} の行末の改行と、\end の直前の行の改行は含めない
+            const body = src.slice(p, end).replace(/^[ \t]*\r?\n/, '').replace(/\r?\n[ \t]*$/, '');
+            if (m[1] !== 'comment') {
+              tokens.push({ type: 'verb', text: body, display: true, env: m[1], opt, line });
+            }
+            advance(end + close.length);
+            continue;
+          }
+        }
+      }
+      // \verb|...| / \verb*|...| / \lstinline|...| / \lstinline{...}
+      const vm = /^\\(verb\*?|lstinline)(?![a-zA-Z])(\[[^\]]*\])?/.exec(src.slice(i, i + 64));
+      if (vm) {
+        const p = i + vm[0].length;
+        const delim = src[p];
+        const closeCh = delim === '{' ? '}' : delim;
+        const end = delim && !/\s/.test(delim) ? src.indexOf(closeCh, p + 1) : -1;
+        if (end >= 0 && !src.slice(p + 1, end).includes('\n')) {
+          flushText();
+          tokens.push({ type: 'verb', text: src.slice(p + 1, end), display: false, env: vm[1] === 'verb*' ? 'verb*' : undefined, line });
+          advance(end + 1);
+          continue;
         }
       }
       if (next === undefined) {

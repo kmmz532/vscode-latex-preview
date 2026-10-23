@@ -29,7 +29,7 @@ interface Ctx {
   meta: Meta;
   /** 日本語文書クラス（jsarticle 等）なら「図」「表」、それ以外は Figure / Table */
   japanese: boolean;
-  counters: { figure: number; table: number; section: number[]; equation: number };
+  counters: { figure: number; table: number; section: number[]; equation: number; listing: number };
   /** \ref で引く番号（前回の描画パスで集めたもの。前方参照のため 2 回描画する） */
   labels: Map<string, string>;
   /** 今回の描画パスで集めた \label */
@@ -80,7 +80,7 @@ export function renderDocument(src: string, opts: RenderOptions): RenderResult {
       opts,
       meta,
       japanese: layout.japanese,
-      counters: { figure: 0, table: 0, section: [0, 0, 0], equation: 0 },
+      counters: { figure: 0, table: 0, section: [0, 0, 0], equation: 0, listing: 0 },
       labels,
       collected: new Map(),
       currentLabel: '',
@@ -193,6 +193,8 @@ function renderNode(n: Node, ctx: Ctx): Out {
       return inline(renderInline(n.children, ctx));
     case 'math':
       return renderMath(n, ctx);
+    case 'verb':
+      return renderVerb(n, ctx);
     case 'parbreak':
       return NOTHING;
     case 'command': {
@@ -243,6 +245,53 @@ function renderMath(n: Extract<Node, { kind: 'math' }>, ctx: Ctx): Out {
   });
   const src = kenv ? `\\begin{${kenv}}${out.join('\\\\')}\\end{${kenv}}` : out.join('');
   return block(`<div ${attr} data-line="${n.line}">${escapeHtml(src)}</div>`);
+}
+
+function renderVerb(n: Extract<Node, { kind: 'verb' }>, ctx: Ctx): Out {
+  // verbatim* / \verb* は空白を ␣ で見せる
+  const visible = (s: string) => (n.env?.endsWith('*') ? s.replace(/ /g, '␣') : s);
+  if (!n.display) {
+    return inline(`<code class="verb">${escapeHtml(visible(n.text))}</code>`);
+  }
+  // lstlisting / minted の key=value オプションから caption と label を拾う
+  const opts = parseKeyValues(n.opt ?? '');
+  let caption = '';
+  if (opts.caption !== undefined) {
+    ctx.counters.listing++;
+    ctx.currentLabel = String(ctx.counters.listing);
+    caption = `<div class="caption">Listing ${ctx.counters.listing}: ${renderInline(parse(opts.caption), ctx)}</div>`;
+  }
+  if (opts.label) {
+    ctx.collected.set(opts.label, ctx.currentLabel);
+  }
+  return block(`<figure class="listing" data-line="${n.line}">${caption}<pre class="verbatim">${escapeHtml(visible(n.text))}</pre></figure>`);
+}
+
+/** "caption={a, b}, label=x" のような key=value 列（{} の中のカンマでは区切らない） */
+function parseKeyValues(s: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  let depth = 0;
+  let buf = '';
+  const flush = () => {
+    const m = /^\s*([^=]+?)\s*(?:=\s*(.*?))?\s*$/s.exec(buf);
+    if (m && m[1]) {
+      out[m[1]] = (m[2] ?? '').replace(/^\{([\s\S]*)\}$/, '$1');
+    }
+    buf = '';
+  };
+  for (const c of s) {
+    if (c === '{') {
+      depth++;
+    } else if (c === '}') {
+      depth--;
+    } else if (c === ',' && depth === 0) {
+      flush();
+      continue;
+    }
+    buf += c;
+  }
+  flush();
+  return out;
 }
 
 /** 数式中の \label{...} を取り除き、直前の番号に対応付ける（KaTeX は \label 非対応） */
@@ -586,21 +635,27 @@ interface Row {
   cells: Node[][];
   /** この行の上に引く横線の本数 */
   hlines: number;
+  /** この行の上に引く部分的な横線（\cline{a-b}、列番号は 1 始まり） */
+  clines: [number, number][];
 }
 
 /** 子ノードを \\ で行に、& でセルに分ける */
 function splitRows(children: Node[]): Row[] {
   const rows: Row[] = [];
-  let row: Row = { cells: [[]], hlines: 0 };
+  let row: Row = { cells: [[]], hlines: 0, clines: [] };
   const cell = () => row.cells[row.cells.length - 1];
   for (const n of children) {
     if (n.kind === 'command' && (n.name === '\\' || n.name === 'tabularnewline')) {
       rows.push(row);
-      row = { cells: [[]], hlines: 0 };
+      row = { cells: [[]], hlines: 0, clines: [] };
     } else if (n.kind === 'command' && (n.name === 'hline' || n.name === 'toprule' || n.name === 'midrule' || n.name === 'bottomrule')) {
       row.hlines++;
-    } else if (n.kind === 'command' && n.name === 'cline') {
-      // 部分的な横線は省略
+    } else if (n.kind === 'command' && (n.name === 'cline' || n.name === 'cmidrule')) {
+      // \cline{2-3} / \cmidrule(lr){2-3}
+      const m = /(\d+)\s*-\s*(\d+)/.exec(plain(n.args[n.args.length - 1]));
+      if (m) {
+        row.clines.push([parseInt(m[1], 10), parseInt(m[2], 10)]);
+      }
     } else if (n.kind === 'text' && n.value.includes('&')) {
       const parts = n.value.split('&');
       parts.forEach((p, k) => {
@@ -628,17 +683,30 @@ const tabular: EnvHandler = (n, ctx) => {
   const rows = splitRows(n.children);
   // 最後の \\ の後ろは横線だけの行になるので、表の下線として扱う
   const last = rows[rows.length - 1];
-  let bottom = 0;
+  let bottom: Pick<Row, 'hlines' | 'clines'> = { hlines: 0, clines: [] };
   if (last && last.cells.length === 1 && isBlank(last.cells[0])) {
-    bottom = last.hlines;
+    bottom = last;
     rows.pop();
   }
   const border = (count: number) => (count >= 2 ? '3px double' : count === 1 ? '1px solid' : '');
+  /** 横線の本数（全幅の \hline か、列 from〜to を含む \cline） */
+  const lineAt = (r: Pick<Row, 'hlines' | 'clines'>, from: number, to: number) =>
+    r.hlines || (r.clines.some(([a, b]) => a <= from && to <= b) ? 1 : 0);
+  /** \multirow で下の行に食い込んでいる列（列 → 残り行数） */
+  const covered = new Map<number, number>();
   const trs = rows.map((r, ri) => {
-    const nextHlines = ri + 1 < rows.length ? rows[ri + 1].hlines : bottom;
+    const next = ri + 1 < rows.length ? rows[ri + 1] : bottom;
     let col = 0;
     const tds = r.cells.map((c) => {
+      // 上の行の \multirow が覆っている列は、空セルを読み飛ばす
+      const cover = covered.get(col) ?? 0;
+      if (cover > 0) {
+        covered.set(col, cover - 1);
+        col++;
+        return '';
+      }
       let span = 1;
+      let rowspan = 1;
       let col0 = cols[col];
       let content = c;
       let lastCol: Column | undefined;
@@ -651,7 +719,20 @@ const tabular: EnvHandler = (n, ctx) => {
       } else {
         lastCol = cols[col + span - 1];
       }
+      // \multirow{n}{幅}{content}（\multicolumn の中でも可）
+      const mr = content.filter((x) => !(x.kind === 'text' && !x.value.trim()));
+      if (mr.length === 1 && mr[0].kind === 'command' && mr[0].name === 'multirow') {
+        rowspan = Math.max(1, Math.min(parseInt(plain(mr[0].args[0]), 10) || 1, rows.length - ri));
+        content = mr[0].args[2] ?? [];
+        for (let k = col; k < col + span; k++) {
+          covered.set(k, rowspan - 1);
+        }
+      }
+      const from = col + 1;
+      const to = col + span;
       col += span;
+      const top = lineAt(r, from, to);
+      const below = lineAt(rowspan > 1 ? (ri + rowspan < rows.length ? rows[ri + rowspan] : bottom) : next, from, to);
       const style: string[] = [`text-align:${col0?.align ?? 'left'}`];
       if (col0?.width) {
         style.push(`width:${col0.width}`);
@@ -662,13 +743,17 @@ const tabular: EnvHandler = (n, ctx) => {
       if (lastCol?.borderRight) {
         style.push(`border-right:${border(lastCol.borderRight)}`);
       }
-      if (r.hlines) {
-        style.push(`border-top:${border(r.hlines)}`);
+      if (top) {
+        style.push(`border-top:${border(top)}`);
       }
-      if (nextHlines) {
-        style.push(`border-bottom:${border(nextHlines)}`);
+      if (below) {
+        style.push(`border-bottom:${border(below)}`);
       }
-      return `<td${span > 1 ? ` colspan="${span}"` : ''} style="${style.join(';')}">${renderInline(content, ctx).trim()}</td>`;
+      if (rowspan > 1) {
+        style.push('vertical-align:middle');
+      }
+      const attrs = (span > 1 ? ` colspan="${span}"` : '') + (rowspan > 1 ? ` rowspan="${rowspan}"` : '');
+      return `<td${attrs} style="${style.join(';')}">${renderInline(content, ctx).trim()}</td>`;
     });
     return `<tr>${tds.join('')}</tr>`;
   });

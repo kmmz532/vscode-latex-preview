@@ -20,7 +20,8 @@ LaTeXを簡易プレビューするVSCode拡張機能<br />
 - 文字装飾: `\textbf` `\textit` `\emph` `\texttt` `\underline` など
 - リスト: `itemize` `enumerate` `description`
 - `figure` / `table` と `\caption`（画像はファイル名の枠で表示）
-- 表: `tabular` `tabular*` `tabularx`（`l` `c` `r` `p{幅}`、縦線 `|`、`\hline`、`\multicolumn`）
+- 表: `tabular` `tabular*` `tabularx`（`l` `c` `r` `p{幅}`、縦線 `|`、`\hline`、`\cline`、`\multicolumn`、`\multirow`）
+- コード: `verbatim` `Verbatim` `lstlisting`（`caption` / `label` 対応）`minted`、文中の `\verb` / `\lstinline`（色分けはしない）
 - マクロ: `\newcommand` `\renewcommand` `\providecommand` `\def`（引数・オプション引数の既定値に対応。数式中でも使える）
 - 参考文献: `\bibliography` で `.tex` と同じフォルダの `.bib` を読み込む。`\bibliographystyle` で並び順を切り替え（`unsrt` / `junsrt` は引用順、それ以外は著者名順、`alpha` はラベル形式）。`thebibliography` / `\bibitem`、`\cite` / `\nocite` にも対応
 - 数式番号: `equation` `align` `gather` `multline` に自動で番号を振る（`\nonumber` `\notag` `\tag` に対応）
@@ -39,7 +40,7 @@ LaTeXを簡易プレビューするVSCode拡張機能<br />
 
 ## 制限
 - 段落はページをまたいで分割しない
-- 画像の読み込み、`\input` / `\include`、`\cline`、`\multirow` などは未対応
+- 画像の読み込み、`\input` / `\include` は未対応
 - `\def` の区切り付きパラメータ（`\def\foo#1.{...}` など）は未対応
 - 寸法のデフォルトは各文書クラスの近似値
 - 参考文献の書式は `\bibliographystyle` によらず `plain` に近い簡易的なもの
