@@ -18,7 +18,16 @@
     "vscode": "^1.90.0"
   },
   "categories": [
-    "Programming Languages"
+    "Visualization"
+  ],
+  "keywords": [
+    "latex",
+    "tex",
+    "preview",
+    "katex",
+    "jsarticle",
+    "vscode.dev",
+    "github.dev"
   ],
   "activationEvents": [
     "onLanguage:latex"

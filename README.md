@@ -36,12 +36,10 @@ LaTeXを簡易プレビューするVSCode拡張機能<br />
 - 画像の読み込み、`tabular`、`\newcommand`、`\input` などは未対応
 - 寸法のデフォルトは各文書クラスの近似値
 
-## 開発
-```bash
-npm install
-npm run compile-web
-npm run run-in-browser   # ブラウザ版 VS Code で sample/ を開いて起動
-```
+## バグ報告、要望
+- https://github.com/kmmz532/vscode-latex-preview/issues
+
+開発者向けの情報は [docs/README.md](docs/README.md) を参照。
 
 ## License
 - MIT
