@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { findBibliographyFiles } from './parser/bibtex';
 import { IMAGE_EXTENSIONS, IMAGE_MIME, findGraphics } from './parser/graphics';
-import { renderDocument } from './parser/renderer';
+import { renderDocument } from './parser/render';
 
 export class PreviewPanel {
   private static readonly panels = new Map<string, PreviewPanel>();
