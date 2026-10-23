@@ -1,0 +1,14 @@
+{
+  "extension.description": "Web版VSCodeでも動作する軽量なLaTeXプレビュー",
+  "command.openPreview": "プレビューを開く",
+  "command.openPreviewToSide": "プレビューを横に開く",
+  "command.openSettings": "設定を開く",
+  "config.debounceMs": "編集してからプレビューを更新するまでの待ち時間（ミリ秒）。",
+  "config.followActiveEditor": "プレビューを選択中の .tex エディタに追従させる。特定のファイルを表示し続けるにはプレビューのタブ右上の鍵のアイコンを使う。false にするとファイルごとに別のプレビューを開く。",
+  "config.mathMacros": "すべての文書で使える KaTeX のマクロ。settings.json に `{ \"\\\\R\": \"\\\\mathbb{R}\" }` のように書く。文書中の `\\newcommand` で定義したものが優先される。",
+  "config.paginate": "\\documentclass のある文書を \\textheight ごとのページに分ける。false にすると 1 枚に続けて表示する。",
+  "config.scrollSync": "エディタとプレビューのスクロールを同期する。",
+  "config.showUnknownCommands": "未対応のコマンドをソースのまま薄い色で表示する。",
+  "command.lock": "プレビューをこのファイルに固定",
+  "command.unlock": "プレビューの固定を解除（選択中のエディタに追従）"
+}

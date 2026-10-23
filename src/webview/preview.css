@@ -5,6 +5,9 @@ body {
   margin: 0;
 }
 
+/* 拡大縮小は preview.ts が transform: scale と幅で行う */
+#content { transform-origin: top left; }
+
 /*
  * 紙面。寸法（--fs 等）は renderer が文書クラスとプリアンブルから算出して style 属性で渡す。
  * 欧文は KaTeX 同梱の KaTeX_Main（Computer Modern 系）、和文は OS の明朝・ゴシックを使う

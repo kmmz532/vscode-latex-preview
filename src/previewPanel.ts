@@ -14,6 +14,18 @@ const MAX_INPUT_DEPTH = 10;
 export class PreviewPanel {
   private static dynamicPanel: PreviewPanel | undefined;
   private static readonly lockedPanels = new Map<string, PreviewPanel>();
+  /** フォーカスのあるプレビュー（タブ右上の鍵ボタンの対象） */
+  private static activePanel: PreviewPanel | undefined;
+
+  /** フォーカスのあるプレビューのロックを切り替える（コマンド latexPreview.lock / unlock） */
+  static setActiveLocked(locked: boolean) {
+    PreviewPanel.activePanel?.setLocked(locked);
+  }
+
+  /** 鍵ボタンの表示（when 句の latexPreview.locked）を、フォーカスのあるプレビューに合わせる */
+  private static updateLockContext() {
+    void vscode.commands.executeCommand('setContext', 'latexPreview.locked', PreviewPanel.activePanel?.locked ?? false);
+  }
 
   static show(context: vscode.ExtensionContext, document: vscode.TextDocument, column: vscode.ViewColumn) {
     const locked = PreviewPanel.lockedPanels.get(document.uri.toString());
@@ -101,12 +113,8 @@ export class PreviewPanel {
       switch (msg.type) {
         case 'ready':
           // Webview のスクリプトが読み込まれてから初回描画する
-          this.post({ type: 'locked', value: this.locked });
           this.postConfig();
           void this.update();
-          break;
-        case 'toggleLock':
-          this.setLocked(!this.locked);
           break;
         case 'reveal': {
           // プレビューのスクロールにエディタを追従させる
@@ -129,6 +137,18 @@ export class PreviewPanel {
         }
       }
     }, null, this.disposables);
+    this.panel.onDidChangeViewState(
+      (e) => {
+        if (e.webviewPanel.active) {
+          PreviewPanel.activePanel = this;
+        } else if (PreviewPanel.activePanel === this) {
+          PreviewPanel.activePanel = undefined;
+        }
+        PreviewPanel.updateLockContext();
+      },
+      null,
+      this.disposables
+    );
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
   }
 
@@ -172,7 +192,7 @@ export class PreviewPanel {
     }
     this.locked = locked;
     this.panel.title = this.title();
-    this.post({ type: 'locked', value: locked });
+    PreviewPanel.updateLockContext();
   }
 
   private scheduleUpdate() {
@@ -243,7 +263,7 @@ export class PreviewPanel {
     const uri = (p: string) => webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, p));
     const nonce = makeNonce();
     return `<!DOCTYPE html>
-<html>
+<html lang="${vscode.env.language}">
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; img-src ${webview.cspSource} data:; script-src 'nonce-${nonce}';">

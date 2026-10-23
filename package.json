@@ -1,7 +1,7 @@
 {
   "name": "simple-latex-preview",
   "displayName": "Simple LaTeX Preview",
-  "description": "Lightweight LaTeX preview that also works in VS Code for the Web",
+  "description": "%extension.description%",
   "version": "0.0.5",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -53,12 +53,12 @@
         "latexPreview.debounceMs": {
           "type": "number",
           "default": 200,
-          "description": "Delay in milliseconds before the preview updates after an edit."
+          "description": "%config.debounceMs%"
         },
         "latexPreview.followActiveEditor": {
           "type": "boolean",
           "default": true,
-          "description": "The preview follows the active .tex editor. Use the lock button in the preview to keep showing a specific file. When false, each file gets its own preview."
+          "description": "%config.followActiveEditor%"
         },
         "latexPreview.mathMacros": {
           "type": "object",
@@ -66,43 +66,55 @@
           "additionalProperties": {
             "type": "string"
           },
-          "markdownDescription": "KaTeX macros available in every document, e.g. `{ \"\\\\R\": \"\\\\mathbb{R}\" }` (in settings.json). Macros defined in the document with `\\newcommand` take precedence."
+          "markdownDescription": "%config.mathMacros%"
         },
         "latexPreview.paginate": {
           "type": "boolean",
           "default": true,
-          "description": "Split documents with \\documentclass into pages of \\textheight. When false, the document is shown as one continuous page."
+          "description": "%config.paginate%"
         },
         "latexPreview.scrollSync": {
           "type": "boolean",
           "default": true,
-          "description": "Sync scrolling between the editor and the preview."
+          "description": "%config.scrollSync%"
         },
         "latexPreview.showUnknownCommands": {
           "type": "boolean",
           "default": true,
-          "description": "Show unsupported commands as dimmed source text."
+          "description": "%config.showUnknownCommands%"
         }
       }
     },
     "commands": [
       {
         "command": "latexPreview.openPreview",
-        "title": "Open Preview",
+        "title": "%command.openPreview%",
         "category": "LaTeX Preview",
         "icon": "$(open-preview)"
       },
       {
         "command": "latexPreview.openPreviewToSide",
-        "title": "Open Preview to the Side",
+        "title": "%command.openPreviewToSide%",
         "category": "LaTeX Preview",
         "icon": "$(open-preview)"
       },
       {
         "command": "latexPreview.openSettings",
-        "title": "Open Settings",
+        "title": "%command.openSettings%",
         "category": "LaTeX Preview",
         "icon": "$(gear)"
+      },
+      {
+        "command": "latexPreview.lock",
+        "title": "%command.lock%",
+        "category": "LaTeX Preview",
+        "icon": "$(unlock)"
+      },
+      {
+        "command": "latexPreview.unlock",
+        "title": "%command.unlock%",
+        "category": "LaTeX Preview",
+        "icon": "$(lock)"
       }
     ],
     "menus": {
@@ -116,6 +128,26 @@
           "command": "latexPreview.openSettings",
           "when": "activeWebviewPanelId == 'latexPreview'",
           "group": "latexPreview@1"
+        },
+        {
+          "command": "latexPreview.lock",
+          "when": "activeWebviewPanelId == 'latexPreview' && !latexPreview.locked",
+          "group": "navigation"
+        },
+        {
+          "command": "latexPreview.unlock",
+          "when": "activeWebviewPanelId == 'latexPreview' && latexPreview.locked",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "latexPreview.lock",
+          "when": "activeWebviewPanelId == 'latexPreview' && !latexPreview.locked"
+        },
+        {
+          "command": "latexPreview.unlock",
+          "when": "activeWebviewPanelId == 'latexPreview' && latexPreview.locked"
         }
       ]
     }

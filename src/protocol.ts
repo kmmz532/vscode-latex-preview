@@ -4,8 +4,6 @@
 export type ToWebview =
   /** 描画結果。line はエディタの表示位置（同期中はそこへスクロールする） */
   | { type: 'update'; html: string; macros: Record<string, string>; line?: number }
-  /** ロック状態（鍵ボタンの表示用） */
-  | { type: 'locked'; value: boolean }
   /** Webview 側で使う設定（latexPreview.*） */
   | { type: 'config'; scrollSync: boolean }
   /** エディタのスクロールに合わせる */
@@ -15,7 +13,6 @@ export type ToWebview =
 export type FromWebview =
   /** スクリプトの読み込み完了（初回描画の合図） */
   | { type: 'ready' }
-  | { type: 'toggleLock' }
   /** プレビューのスクロールにエディタを合わせる */
   | { type: 'reveal'; line: number }
   /** ダブルクリックした段落の行をエディタで開く */

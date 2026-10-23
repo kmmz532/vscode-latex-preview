@@ -11,13 +11,13 @@ interface ViewState {
   /** fit: 窓に収まるよう自動縮小 / manual: zoom の値で固定 */
   mode: 'fit' | 'manual';
   zoom: number;
-  /** エディタとスクロールを同期するか */
-  sync: boolean;
 }
 
 const vscode = acquireVsCodeApi();
 const content = document.getElementById('content')!;
-let state: ViewState = { mode: 'fit', zoom: 1, sync: true, ...vscode.getState() };
+let state: ViewState = { mode: 'fit', zoom: 1, ...vscode.getState() };
+/** エディタとスクロールを同期するか（設定 latexPreview.scrollSync） */
+let scrollSync = true;
 
 const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 
@@ -28,39 +28,58 @@ const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 let mathCache = new Map<string, string>();
 let mathCacheMacros = '';
 
-function renderMath(root: HTMLElement, macros: Record<string, string>) {
+/**
+ * 1 回の更新で数式を描画するもの。render は要素ごとに何度呼んでもよく（ページ分割で使い回すブロックは描画しない）、
+ * 最後に finish でキャッシュを今回使った数式だけに入れ替える（際限なく増えないように）
+ */
+function mathRenderer(macros: Record<string, string>) {
   const macrosKey = JSON.stringify(macros);
   const prev = macrosKey === mathCacheMacros ? mathCache : new Map<string, string>();
-  // 今回使った数式だけを残す（キャッシュが際限なく増えないように）
   const next = new Map<string, string>();
-  root.querySelectorAll<HTMLElement>('.math').forEach((el) => {
-    const tex = el.textContent ?? '';
-    const display = el.dataset.display === '1';
-    const key = (display ? 'D' : 'I') + tex;
-    const cached = prev.get(key) ?? next.get(key);
-    if (cached !== undefined) {
-      el.innerHTML = cached;
-      next.set(key, cached);
-      return;
-    }
-    try {
-      katex.render(tex, el, {
-        displayMode: display,
-        throwOnError: false,
-        strict: 'ignore',
-        // \gdef 等で書き換えられても次の数式に影響しないよう毎回コピーする
-        macros: { ...macros },
-      });
-      next.set(key, el.innerHTML);
-    } catch (e) {
-      el.classList.add('math-error');
-      el.textContent = tex;
-      el.title = String(e);
-    }
-  });
-  mathCache = next;
-  mathCacheMacros = macrosKey;
+  const render = (root: Element) => {
+    root.querySelectorAll<HTMLElement>('.math').forEach((el) => {
+      const tex = el.textContent ?? '';
+      const display = el.dataset.display === '1';
+      const key = (display ? 'D' : 'I') + tex;
+      const cached = prev.get(key) ?? next.get(key);
+      if (cached !== undefined) {
+        el.innerHTML = cached;
+        next.set(key, cached);
+        return;
+      }
+      try {
+        katex.render(tex, el, {
+          displayMode: display,
+          throwOnError: false,
+          strict: 'ignore',
+          // \gdef 等で書き換えられても次の数式に影響しないよう毎回コピーする
+          macros: { ...macros },
+        });
+        next.set(key, el.innerHTML);
+      } catch (e) {
+        el.classList.add('math-error');
+        el.textContent = tex;
+        el.title = String(e);
+      }
+    });
+  };
+  const finish = () => {
+    mathCache = next;
+    mathCacheMacros = macrosKey;
+  };
+  return { render, finish };
 }
+
+// ---- 表示言語 ----
+
+/** ツールバーの文言。VS Code の表示言語（拡張機能が <html lang> に入れる）が日本語なら日本語にする */
+const ja = document.documentElement.lang.startsWith('ja');
+const t = {
+  zoomOut: ja ? '縮小' : 'Zoom out',
+  zoomIn: ja ? '拡大' : 'Zoom in',
+  actualSize: ja ? '等倍' : 'Actual size',
+  fit: ja ? '窓幅に合わせる' : 'Fit to window',
+};
 
 // ---- ズーム ----
 
@@ -74,33 +93,23 @@ const button = (label: string, title: string, onClick: () => void) => {
   toolbar.appendChild(b);
   return b;
 };
-button('−', 'Zoom out', () => stepZoom(-1));
+button('−', t.zoomOut, () => stepZoom(-1));
 const zoomLabel = document.createElement('span');
 zoomLabel.className = 'zoom-label';
 toolbar.appendChild(zoomLabel);
-button('+', 'Zoom in', () => stepZoom(1));
-const actual = button('100%', 'Actual size', () => setState({ mode: 'manual', zoom: 1 }));
-const fit = button('', 'Fit to window', () => setState({ mode: 'fit', zoom: state.zoom }));
+button('+', t.zoomIn, () => stepZoom(1));
+const actual = button('100%', t.actualSize, () => setState({ mode: 'manual', zoom: 1 }));
+const fit = button('', t.fit, () => setState({ mode: 'fit', zoom: state.zoom }));
 // 両端の縦線へ向かう左右矢印（幅に合わせる）
 fit.innerHTML =
   '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 2h1.5v12H1zM13.5 2H15v12h-1.5z"/>' +
   '<path d="M4 8l2.5-2.5v1.75h3V5.5L12 8l-2.5 2.5V8.75h-3v1.75z"/></svg>';
-const syncButton = button('', 'Sync scroll with editor', () => setState({ sync: !state.sync }));
-// 鎖のアイコン（エディタと連動）
-syncButton.innerHTML =
-  '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.9 9.1a.75.75 0 0 1 0-1.06l1.13-1.13a.75.75 0 1 1 1.06 1.06L7.96 9.1a.75.75 0 0 1-1.06 0z"/>' +
-  '<path d="M4.4 8.5 3.3 9.6a2.25 2.25 0 0 0 3.18 3.18l1.1-1.1 1.07 1.06-1.1 1.1A3.75 3.75 0 0 1 2.24 8.54l1.1-1.1zM11.6 7.5l1.1-1.1a2.25 2.25 0 0 0-3.18-3.18l-1.1 1.1-1.07-1.06 1.1-1.1a3.75 3.75 0 0 1 5.3 5.3l-1.1 1.1z"/></svg>';
-// 鍵のアイコン（このファイルに固定 / アクティブなエディタに追従）。状態は拡張機能側が持つ
-const lockButton = button('', 'Lock preview to this file', () => vscode.postMessage({ type: 'toggleLock' }));
-lockButton.innerHTML =
-  '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 7V5a3 3 0 0 1 6 0v2h1a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zm1.5 0h3V5a1.5 1.5 0 0 0-3 0z"/></svg>';
 document.body.appendChild(toolbar);
 
 function setState(next: Partial<ViewState>) {
   state = { ...state, ...next };
   vscode.setState(state);
   applyZoom();
-  syncButton.classList.toggle('active', state.sync);
 }
 
 function stepZoom(dir: 1 | -1) {
@@ -115,11 +124,8 @@ function fitZoom(): number {
   if (!page) {
     return 1;
   }
-  // zoom の影響を受けない紙面幅を測る
-  const prev = content.style.zoom;
-  content.style.zoom = '1';
-  const pageWidth = page.getBoundingClientRect().width;
-  content.style.zoom = prev;
+  // 拡大縮小（transform）の影響を受けない紙面幅
+  const pageWidth = page.offsetWidth;
   const style = getComputedStyle(document.body);
   const available = document.documentElement.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
   return pageWidth > 0 && available < pageWidth ? Math.max(available / pageWidth, 0.2) : 1;
@@ -129,9 +135,15 @@ function currentZoom(): number {
   return state.mode === 'fit' ? fitZoom() : state.zoom;
 }
 
+/**
+ * CSS の zoom は変えるたびに全ページのレイアウトを計算し直すので、transform で拡大縮小する。
+ * 幅は 1/z にして窓幅に合わせ、縦は transform で増減した分を margin で詰める
+ */
 function applyZoom() {
   const z = currentZoom();
-  content.style.zoom = String(z);
+  content.style.width = `${100 / z}%`;
+  content.style.transform = `scale(${z})`;
+  content.style.marginBottom = `${content.offsetHeight * (z - 1)}px`;
   zoomLabel.textContent = `${Math.round(z * 100)}%`;
   fit.classList.toggle('active', state.mode === 'fit');
   actual.classList.toggle('active', state.mode === 'manual' && Math.abs(state.zoom - 1) < 0.001);
@@ -207,7 +219,7 @@ function collectBlocks(doc: HTMLElement): Block[] {
  * prev があれば、その doc の上で組み直す。先頭から変わっていないページと、
  * 変更箇所の後でページの始まりが前回と揃ったところから先は、前回のページをそのまま残す
  */
-function paginate(doc: HTMLElement, blocks: Block[], docKey: string, prev?: Layout): Layout {
+function paginate(doc: HTMLElement, blocks: Block[], docKey: string, renderMath: (el: Element) => void, prev?: Layout): Layout {
   const old = prev?.blocks ?? [];
   const n = blocks.length;
   const m = old.length;
@@ -246,17 +258,19 @@ function paginate(doc: HTMLElement, blocks: Block[], docKey: string, prev?: Layo
     }
     blocks[start].pieces = blocks[start].pieces.filter((x) => !rest.includes(x));
   }
-  // 組み直すページは前回の r ページ目の手前に入れていき、最後に要らなくなった前回のページを外す
-  const anchor = oldPages[r]?.el ?? null;
+  // 組み直すページはいったん末尾に足していき（途中に入れると後ろのページまで測り直しになり遅い）、
+  // 最後に要らなくなった前回のページを外して、残す前回のページの手前へ移す
   if (!prev) {
     doc.replaceChildren();
   }
   let dropUntil = oldPages.length;
+  const created: HTMLElement[] = [];
 
   const newPage = (i: number, split: boolean): HTMLElement => {
     const page = document.createElement('div');
     page.className = 'page';
-    doc.insertBefore(page, anchor);
+    doc.appendChild(page);
+    created.push(page);
     pages.push({ el: page, start: i, split, end: i });
     if (!blocks[i].two) {
       return page;
@@ -327,6 +341,8 @@ function paginate(doc: HTMLElement, blocks: Block[], docKey: string, prev?: Layo
     if (tail) {
       b.pieces.push(tail);
       tail = undefined;
+    } else {
+      renderMath(b.el);
     }
     while (block) {
       body.appendChild(block);
@@ -363,6 +379,9 @@ function paginate(doc: HTMLElement, blocks: Block[], docKey: string, prev?: Layo
   }
   for (const p of oldPages.slice(r, dropUntil)) {
     p.el.remove();
+  }
+  if (dropUntil < oldPages.length) {
+    oldPages[dropUntil].el.before(...created);
   }
   return { doc, docKey, blocks, pages };
 }
@@ -495,7 +514,7 @@ function topLine(): number | undefined {
 
 let scrollTimer: ReturnType<typeof setTimeout> | undefined;
 window.addEventListener('scroll', () => {
-  if (!state.sync || Date.now() < ignoreScrollUntil) {
+  if (!scrollSync || Date.now() < ignoreScrollUntil) {
     return;
   }
   clearTimeout(scrollTimer);
@@ -524,36 +543,52 @@ window.addEventListener('message', async (event: MessageEvent<ToWebview>) => {
   if (msg.type === 'update') {
     const version = ++updateVersion;
     const scrollY = window.scrollY;
-    content.innerHTML = msg.html;
-    const docs = Array.from(content.querySelectorAll<HTMLElement>('.doc.paged'));
+    // 画面に出す前に、画面外の要素で数式の描画と画像の読み込みを済ませる
+    const fresh = document.createElement('div');
+    fresh.innerHTML = msg.html;
+    const docs = Array.from(fresh.querySelectorAll<HTMLElement>('.doc.paged'));
     const blocks = docs.map(collectBlocks);
-    renderMath(content, msg.macros);
+    // ページ分割する文書の数式は、組み直すブロックだけ paginate で描画する
+    const math = mathRenderer(msg.macros);
+    for (const el of Array.from(fresh.children)) {
+      if (!docs.includes(el as HTMLElement)) {
+        math.render(el);
+      }
+    }
     // 画像の大きさが決まってからページ分割する
-    await Promise.all(Array.from(content.querySelectorAll('img')).map((img) => img.decode().catch(() => undefined)));
+    await Promise.all(Array.from(fresh.querySelectorAll('img')).map((img) => img.decode().catch(() => undefined)));
     if (version !== updateVersion) {
       return;
     }
-    // ページ分割は等倍で測る
-    const zoom = content.style.zoom;
-    content.style.zoom = '1';
-    // 文書クラスの寸法やマクロが変わったら前回の分割は使えない
     const macrosKey = JSON.stringify(msg.macros);
-    docs.forEach((doc, k) => paginate(doc, blocks[k], `${doc.className}|${doc.getAttribute('style')}|${macrosKey}`, k));
-    layouts.length = docs.length;
-    content.style.zoom = zoom;
+    const docKeys = docs.map((doc) => `${doc.className}|${doc.getAttribute('style')}|${macrosKey}`);
+    // 前回と同じ 1 つの文書なら、画面のページを残したまま変わったところだけ組み直す
+    const prev =
+      docs.length === 1 && fresh.childElementCount === 1 && layout?.docKey === docKeys[0] && layout.doc.parentElement === content && content.childElementCount === 1
+        ? layout
+        : undefined;
+    if (!prev) {
+      content.replaceChildren(...Array.from(fresh.childNodes));
+    }
+    // ページ分割は等倍で測る（transform だけなのでレイアウトは計算し直さない）
+    const transform = content.style.transform;
+    content.style.transform = 'scale(1)';
+    const results = docs.map((doc, k) => paginate(prev ? prev.doc : doc, blocks[k], docKeys[k], math.render, prev));
+    math.finish();
+    layout = results.length === 1 ? results[0] : undefined;
+    content.style.transform = transform;
     // 段組みの有無で最小幅が変わるので再計算
     applyZoom();
     // 同期中はエディタの位置へ、そうでなければ元のスクロール位置を保つ
-    if (state.sync && typeof msg.line === 'number') {
+    if (scrollSync && typeof msg.line === 'number') {
       scrollToLine(msg.line);
     } else {
       ignoreScrollUntil = Date.now() + 200;
       window.scrollTo(0, scrollY);
     }
-  } else if (msg.type === 'locked') {
-    lockButton.classList.toggle('active', msg.value);
-    lockButton.title = msg.value ? 'Unlock preview (follow the active editor)' : 'Lock preview to this file';
-  } else if (msg.type === 'scrollTo' && state.sync) {
+  } else if (msg.type === 'config') {
+    scrollSync = msg.scrollSync;
+  } else if (msg.type === 'scrollTo' && scrollSync) {
     scrollToLine(msg.line);
   }
 });

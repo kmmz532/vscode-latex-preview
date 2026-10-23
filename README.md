@@ -16,7 +16,7 @@ Unlike other LaTeX extensions, it also works in VS Code for the Web (vscode.dev 
 Use the buttons at the top right of the preview to zoom out / in (`−` / `+`), show at actual size (`100%`), or fit to the window (Fit). Scroll sync with the editor can be turned off with the `latexPreview.scrollSync` setting.
 Double-click on the preview to jump to that line in the editor.
 
-The preview follows the active `.tex` editor. Click the lock icon to keep it on the current file; opening the preview again then creates a new preview, so you can view several files side by side.
+The preview follows the active `.tex` editor. Click the lock icon at the top right of the preview tab to keep it on the current file; opening the preview again then creates a new preview, so you can view several files side by side.
 
 ## Supported syntax
 - Math: `$...$` `\(...\)` `$$...$$` `\[...\]`, `equation` `align` `gather` `multline` (rendered with KaTeX)

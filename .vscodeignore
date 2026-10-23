@@ -4,3 +4,5 @@ dist/web/**/*.map
 !README.md
 !LICENSE
 !images/icon.png
+!package.nls.json
+!package.nls.ja.json

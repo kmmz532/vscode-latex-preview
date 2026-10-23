@@ -1,0 +1,14 @@
+{
+  "extension.description": "Lightweight LaTeX preview that also works in VSCode for the Web",
+  "command.openPreview": "Open Preview",
+  "command.openPreviewToSide": "Open Preview to the Side",
+  "command.openSettings": "Open Settings",
+  "config.debounceMs": "Delay in milliseconds before the preview updates after an edit.",
+  "config.followActiveEditor": "The preview follows the active .tex editor. Use the lock icon at the top right of the preview tab to keep showing a specific file. When false, each file gets its own preview.",
+  "config.mathMacros": "KaTeX macros available in every document, e.g. `{ \"\\\\R\": \"\\\\mathbb{R}\" }` (in settings.json). Macros defined in the document with `\\newcommand` take precedence.",
+  "config.paginate": "Split documents with \\documentclass into pages of \\textheight. When false, the document is shown as one continuous page.",
+  "config.scrollSync": "Sync scrolling between the editor and the preview.",
+  "config.showUnknownCommands": "Show unsupported commands as dimmed source text.",
+  "command.lock": "Lock Preview to This File",
+  "command.unlock": "Unlock Preview (Follow the Active Editor)"
+}
