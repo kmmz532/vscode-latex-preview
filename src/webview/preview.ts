@@ -217,9 +217,20 @@ function collectBlocks(doc: HTMLElement): Block[] {
  * ブロックを 1 つずつ入れ、あふれたら（2 段組なら 3 段目にはみ出したら）次のページへ送る。
  * 段落（<p>）はあふれた行の頭で分け、残りを次のページへ送る（段の間はブラウザが分割する）。
  * prev があれば、その doc の上で組み直す。先頭から変わっていないページと、
- * 変更箇所の後でページの始まりが前回と揃ったところから先は、前回のページをそのまま残す
+ * 変更箇所の後でページの始まりが前回と揃ったところから先は、前回のページをそのまま残す。
+ *
+ * 新しいページを始める前に shouldPause（引数は直前に作ったページ）が true なら中断（yield）する。
+ * 中断中は、まだ組み直していない前回のページを外し、同じ高さの空き（.page-pending）で埋めておく。
+ * 中断したまま return() されたら、組み終えたところまでを layout に残す（次の更新はそこから組み直す）
  */
-function paginate(doc: HTMLElement, blocks: Block[], docKey: string, renderMath: (el: Element) => void, prev?: Layout): Layout {
+function* paginate(
+  doc: HTMLElement,
+  blocks: Block[],
+  docKey: string,
+  renderMath: (el: Element) => void,
+  shouldPause: (last?: HTMLElement) => boolean,
+  prev?: Layout
+): Generator<void, Layout, void> {
   const old = prev?.blocks ?? [];
   const n = blocks.length;
   const m = old.length;
@@ -265,11 +276,28 @@ function paginate(doc: HTMLElement, blocks: Block[], docKey: string, renderMath:
   }
   let dropUntil = oldPages.length;
   const created: HTMLElement[] = [];
+  let placeholder: HTMLElement | null = null;
+
+  /** 中断する。初回は組み直していない前回のページを外して空きで埋める（外さないと後から足すページの測定が遅い） */
+  function* pause() {
+    if (!placeholder) {
+      const stale = oldPages.slice(r).filter((p) => p.el.parentNode === doc);
+      placeholder = document.createElement('div');
+      placeholder.className = 'page-pending';
+      if (stale.length > 0) {
+        const last = stale[stale.length - 1].el;
+        placeholder.style.height = `${last.offsetTop + last.offsetHeight - stale[0].el.offsetTop}px`;
+      }
+      stale.forEach((p) => p.el.remove());
+      doc.appendChild(placeholder);
+    }
+    yield;
+  }
 
   const newPage = (i: number, split: boolean): HTMLElement => {
     const page = document.createElement('div');
     page.className = 'page';
-    doc.appendChild(page);
+    doc.insertBefore(page, placeholder);
     created.push(page);
     pages.push({ el: page, start: i, split, end: i });
     if (!blocks[i].two) {
@@ -288,6 +316,9 @@ function paginate(doc: HTMLElement, blocks: Block[], docKey: string, renderMath:
     }
     for (const p of oldPages.slice(q)) {
       pages.push({ ...p, start: p.start + shift, end: p.end + shift });
+      if (placeholder) {
+        doc.insertBefore(p.el, placeholder);
+      }
     }
     dropUntil = q;
   };
@@ -324,64 +355,92 @@ function paginate(doc: HTMLElement, blocks: Block[], docKey: string, renderMath:
     return true;
   };
 
-  let body: HTMLElement | undefined;
-  if (tail) {
-    body = newPage(start, true);
-  }
-  for (let i = start; i < n; i++) {
-    const b = blocks[i];
-    // \onecolumn / \twocolumn の切替は LaTeX と同じく改ページ
-    if (!body || (b.segStart && !tail)) {
-      if (resync(i)) {
-        break;
-      }
-      body = newPage(i, false);
-    }
-    let block: Element | undefined = tail ?? b.el;
+  const lastCreated = () => created[created.length - 1];
+  let i = start;
+  let done = false;
+  try {
+    let body: HTMLElement | undefined;
     if (tail) {
-      b.pieces.push(tail);
-      tail = undefined;
-    } else {
-      renderMath(b.el);
+      body = newPage(start, true);
     }
-    while (block) {
-      body.appendChild(block);
-      if (!overflows(body, b.two)) {
-        break;
-      }
-      const rest = splitParagraph(block, body, b.two);
-      if (rest) {
-        pages[pages.length - 1].end = i;
-        if (resyncTail(i, b, rest)) {
-          body = undefined;
+    for (; i < n; i++) {
+      const b = blocks[i];
+      // \onecolumn / \twocolumn の切替は LaTeX と同じく改ページ
+      if (!body || (b.segStart && !tail)) {
+        if (resync(i)) {
           break;
         }
-        b.pieces.push(rest);
-        body = newPage(i, true);
-        block = rest;
-        continue;
-      }
-      if (body.children.length > 1) {
-        block.remove();
-        if (resync(i)) {
-          body = undefined;
-          break;
+        if (body && shouldPause(lastCreated())) {
+          yield* pause();
         }
         body = newPage(i, false);
-        body.appendChild(block);
       }
-      break;
+      let block: Element | undefined = tail ?? b.el;
+      if (tail) {
+        b.pieces.push(tail);
+        tail = undefined;
+      } else {
+        renderMath(b.el);
+      }
+      while (block) {
+        body.appendChild(block);
+        if (!overflows(body, b.two)) {
+          break;
+        }
+        const rest = splitParagraph(block, body, b.two);
+        if (rest) {
+          pages[pages.length - 1].end = i;
+          if (resyncTail(i, b, rest)) {
+            body = undefined;
+            break;
+          }
+          b.pieces.push(rest);
+          if (shouldPause(lastCreated())) {
+            yield* pause();
+          }
+          body = newPage(i, true);
+          block = rest;
+          continue;
+        }
+        if (body.children.length > 1) {
+          block.remove();
+          if (resync(i)) {
+            body = undefined;
+            break;
+          }
+          if (shouldPause(lastCreated())) {
+            yield* pause();
+          }
+          body = newPage(i, false);
+          body.appendChild(block);
+        }
+        break;
+      }
+      if (!body) {
+        break;
+      }
+      pages[pages.length - 1].end = i;
     }
-    if (!body) {
-      break;
+    done = true;
+  } finally {
+    if (placeholder) {
+      (placeholder as HTMLElement).remove();
+    } else {
+      for (const p of oldPages.slice(r, dropUntil)) {
+        p.el.remove();
+      }
+      if (dropUntil < oldPages.length) {
+        oldPages[dropUntil].el.before(...created);
+      }
     }
-    pages[pages.length - 1].end = i;
-  }
-  for (const p of oldPages.slice(r, dropUntil)) {
-    p.el.remove();
-  }
-  if (dropUntil < oldPages.length) {
-    oldPages[dropUntil].el.before(...created);
+    if (!done) {
+      // 途中で打ち切られた。組み途中のブロック i は次の更新で必ず組み直すよう key を空にする
+      const partial = blocks.slice(0, i + 1);
+      if (partial[i]) {
+        partial[i] = { ...partial[i], key: '' };
+      }
+      layout = { doc, docKey, blocks: partial, pages };
+    }
   }
   return { doc, docKey, blocks, pages };
 }
@@ -538,6 +597,30 @@ content.addEventListener('dblclick', (e) => {
 
 let updateVersion = 0;
 
+/** 後から組んでいる途中のページ分割 */
+let pending: { gen: Generator<void, Layout, void>; finish: () => void } | undefined;
+
+/** ページ分割を次の中断まで進める。終わったら結果を返す。等倍で測る（transform だけなのでレイアウトは計算し直さない） */
+function step(gen: Generator<void, Layout, void>): Layout | undefined {
+  const transform = content.style.transform;
+  content.style.transform = 'scale(1)';
+  try {
+    const r = gen.next();
+    return r.done ? r.value : undefined;
+  } finally {
+    content.style.transform = transform;
+  }
+}
+
+/** 組み途中のページ分割を打ち切る（組み終えたところまでが layout に残る） */
+function abortPending() {
+  if (pending) {
+    pending.gen.return(undefined as never);
+    pending.finish();
+    pending = undefined;
+  }
+}
+
 window.addEventListener('message', async (event: MessageEvent<ToWebview>) => {
   const msg = event.data;
   if (msg.type === 'update') {
@@ -560,6 +643,7 @@ window.addEventListener('message', async (event: MessageEvent<ToWebview>) => {
     if (version !== updateVersion) {
       return;
     }
+    abortPending();
     const macrosKey = JSON.stringify(msg.macros);
     const docKeys = docs.map((doc) => `${doc.className}|${doc.getAttribute('style')}|${macrosKey}`);
     // 前回と同じ 1 つの文書なら、画面のページを残したまま変わったところだけ組み直す
@@ -570,13 +654,54 @@ window.addEventListener('message', async (event: MessageEvent<ToWebview>) => {
     if (!prev) {
       content.replaceChildren(...Array.from(fresh.childNodes));
     }
-    // ページ分割は等倍で測る（transform だけなのでレイアウトは計算し直さない）
-    const transform = content.style.transform;
-    content.style.transform = 'scale(1)';
-    const results = docs.map((doc, k) => paginate(prev ? prev.doc : doc, blocks[k], docKeys[k], math.render, prev));
-    math.finish();
-    layout = results.length === 1 ? results[0] : undefined;
-    content.style.transform = transform;
+    if (docs.length === 1) {
+      // 画面の 1 枚下までのページを組んだら（長くても 150ms で）いったん表示し、残りは少しずつ組む
+      const z = currentZoom();
+      const t0 = performance.now();
+      const belowScreen = (page?: HTMLElement) => {
+        if (!page) {
+          return false;
+        }
+        const top = content.getBoundingClientRect().top;
+        return top + (page.getBoundingClientRect().top - top) * z > window.innerHeight * 2;
+      };
+      let deadline = -1;
+      const gen = paginate(
+        prev ? prev.doc : docs[0],
+        blocks[0],
+        docKeys[0],
+        math.render,
+        (last) => (deadline < 0 ? performance.now() - t0 > 150 || belowScreen(last) : performance.now() > deadline),
+        prev
+      );
+      const result = step(gen);
+      if (result) {
+        layout = result;
+        math.finish();
+      } else {
+        pending = { gen, finish: math.finish };
+        const run = () => {
+          if (pending?.gen !== gen) {
+            return;
+          }
+          deadline = performance.now() + 30;
+          const r = step(gen);
+          if (!r) {
+            setTimeout(run, 0);
+            return;
+          }
+          layout = r;
+          math.finish();
+          pending = undefined;
+          applyZoom();
+        };
+        setTimeout(run, 0);
+      }
+    } else {
+      docs.forEach((doc, k) => step(paginate(doc, blocks[k], docKeys[k], math.render, () => false)));
+      layout = undefined;
+      math.finish();
+    }
     // 段組みの有無で最小幅が変わるので再計算
     applyZoom();
     // 同期中はエディタの位置へ、そうでなければ元のスクロール位置を保つ
