@@ -60,6 +60,19 @@
           "default": true,
           "description": "The preview follows the active .tex editor. Use the lock button in the preview to keep showing a specific file. When false, each file gets its own preview."
         },
+        "latexPreview.mathMacros": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "string"
+          },
+          "markdownDescription": "KaTeX macros available in every document, e.g. `{ \"\\\\R\": \"\\\\mathbb{R}\" }` (in settings.json). Macros defined in the document with `\\newcommand` take precedence."
+        },
+        "latexPreview.paginate": {
+          "type": "boolean",
+          "default": true,
+          "description": "Split documents with \\documentclass into pages of \\textheight. When false, the document is shown as one continuous page."
+        },
         "latexPreview.showUnknownCommands": {
           "type": "boolean",
           "default": true,
@@ -79,6 +92,12 @@
         "title": "Open Preview to the Side",
         "category": "LaTeX Preview",
         "icon": "$(open-preview)"
+      },
+      {
+        "command": "latexPreview.openSettings",
+        "title": "Open Settings",
+        "category": "LaTeX Preview",
+        "icon": "$(gear)"
       }
     ],
     "menus": {
@@ -87,6 +106,11 @@
           "command": "latexPreview.openPreviewToSide",
           "when": "resourceLangId == latex",
           "group": "navigation"
+        },
+        {
+          "command": "latexPreview.openSettings",
+          "when": "activeWebviewPanelId == 'latexPreview'",
+          "group": "latexPreview@1"
         }
       ]
     }

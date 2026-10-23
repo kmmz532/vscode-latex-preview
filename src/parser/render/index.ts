@@ -63,7 +63,8 @@ export function renderAnalysis(analysis: Analysis, opts: RenderOptions): RenderR
     `--fs:${layout.fontSize};--lh:${layout.lineHeight};--indent:${layout.parindent};` +
     `--textwidth:${layout.textwidth};--textheight:${layout.textheight};--colsep:${layout.columnsep}`;
   // \documentclass がある完全な文書だけページ分割する（断片はそのまま流す）
-  const paged = nodes.some((n) => n.kind === 'command' && n.name === 'documentclass') ? ' paged' : '';
+  const paged =
+    opts.paginate !== false && nodes.some((n) => n.kind === 'command' && n.name === 'documentclass') ? ' paged' : '';
   const html = `<div class="doc ${layout.japanese ? 'ja' : 'en'}${paged}" style="${style}">${inner}</div>`;
   return { html, macros };
 }

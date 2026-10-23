@@ -43,15 +43,16 @@ LaTeXを簡易プレビューするVSCode拡張機能<br />
 | --- | --- | --- |
 | `latexPreview.debounceMs` | `200` | 編集からプレビュー更新までの待ち時間（ms） |
 | `latexPreview.followActiveEditor` | `true` | 選択中のタブの `.tex` に追従する。`false` ならファイルごとに別のプレビューを開く |
+| `latexPreview.mathMacros` | `{}` | すべての文書で使える KaTeX のマクロ（settings.json に `{ "\\R": "\\mathbb{R}" }` のように書く）。文書中の `\newcommand` が優先 |
+| `latexPreview.paginate` | `true` | `\documentclass` のある文書を `\textheight` ごとのページに分ける。`false` なら 1 枚に続けて表示 |
 | `latexPreview.showUnknownCommands` | `true` | 未対応コマンドをソースのまま表示する |
 
+プレビューの右上の「…」→ Open Settings からも開ける。
+
 ## 制限
-- 段落はページをまたいで分割しない
-- `\input` / `\include` は未対応
 - EPS / PDF の画像は表示できない
-- `\def` の区切り付きパラメータ（`\def\foo#1.{...}` など）は未対応
 - 寸法のデフォルトは各文書クラスの近似値
-- 参考文献の書式は `\bibliographystyle` によらず `plain` に近い簡易的なもの
+- 参考文献の書式は `plain` / `jplain` / `abbrv` / `ieeetr` の系統に寄せた簡易的なもの
 
 ## バグ報告、要望
 - https://github.com/kmmz532/vscode-latex-preview/issues

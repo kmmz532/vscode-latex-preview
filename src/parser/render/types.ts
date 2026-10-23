@@ -11,6 +11,8 @@ export interface RenderOptions {
   images?: Record<string, string>;
   /** \input / \include で読み込むファイルの中身（inputKey → 内容）。読めなかったものは含まない */
   inputs?: Record<string, string>;
+  /** false なら \documentclass があってもページに分けず、1 枚に続けて表示する */
+  paginate?: boolean;
 }
 
 export interface RenderResult {

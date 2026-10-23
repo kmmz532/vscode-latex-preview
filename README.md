@@ -43,15 +43,16 @@ Unsupported commands do not cause errors; they are shown as dimmed source text.
 | --- | --- | --- |
 | `latexPreview.debounceMs` | `200` | Delay in milliseconds before the preview updates after an edit |
 | `latexPreview.followActiveEditor` | `true` | The preview follows the active `.tex` editor. When `false`, each file gets its own preview |
+| `latexPreview.mathMacros` | `{}` | KaTeX macros available in every document (e.g. `{ "\\R": "\\mathbb{R}" }` in settings.json). `\newcommand` in the document takes precedence |
+| `latexPreview.paginate` | `true` | Split documents with `\documentclass` into pages of `\textheight`. When `false`, show one continuous page |
 | `latexPreview.showUnknownCommands` | `true` | Show unsupported commands as dimmed source text |
 
+You can also open them from Open Settings in the preview's "…" menu.
+
 ## Limitations
-- Paragraphs are not split across pages
-- `\input` / `\include` are not supported
 - EPS / PDF images cannot be displayed
-- `\def` with delimited parameters (e.g. `\def\foo#1.{...}`) is not supported
 - Default dimensions are approximations of each document class
-- Bibliography entries are formatted in a simplified `plain`-like style regardless of `\bibliographystyle`
+- Bibliography entries follow the `plain` / `jplain` / `abbrv` / `ieeetr` families in a simplified form
 
 ## Bug reports and feature requests
 - https://github.com/kmmz532/vscode-latex-preview/issues

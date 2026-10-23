@@ -207,7 +207,14 @@ export class PreviewPanel {
     }
     let result: RenderResult;
     try {
-      result = renderAnalysis(analysis, { showUnknownCommands: config.get<boolean>('showUnknownCommands', true), inputs, ...loaded });
+      result = renderAnalysis(analysis, {
+        showUnknownCommands: config.get<boolean>('showUnknownCommands', true),
+        paginate: config.get<boolean>('paginate', true),
+        inputs,
+        ...loaded,
+      });
+      // 設定のマクロは文書中の \newcommand で上書きできるよう先に置く
+      result.macros = { ...normalizeMacros(config.get<Record<string, string>>('mathMacros', {})), ...result.macros };
     } catch (e) {
       result = { html: `<pre class="error">${String(e)}</pre>`, macros: {} };
     }
@@ -262,6 +269,17 @@ function makeNonce(): string {
     s += chars[Math.floor(Math.random() * chars.length)];
   }
   return s;
+}
+
+/** 設定のマクロ名に \ がなければ補う（KaTeX は "\name" の形で受け取る） */
+function normalizeMacros(macros: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, body] of Object.entries(macros ?? {})) {
+    if (typeof body === 'string' && name) {
+      out[name.startsWith('\\') ? name : `\\${name}`] = body;
+    }
+  }
+  return out;
 }
 
 export function isLatex(doc: vscode.TextDocument): boolean {
