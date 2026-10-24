@@ -76,7 +76,7 @@ const maketitle: CommandHandler = (n, ctx) => {
     html += `<div class="author">${renderInline(author, ctx)}</div>`;
   }
   // \date 未指定時は \today 扱い
-  html += `<div class="date">${date ? renderInline(date, ctx) : ctx.locale.today()}</div>`;
+  html += `<div class="date">${date ? renderInline(date, ctx) : ctx.locale.today(ctx.wareki)}</div>`;
   return block(html + '</header>');
 };
 
@@ -131,7 +131,7 @@ export const base: Package = {
     title: ignore,
     author: ignore,
     date: ignore,
-    today: { args: 0, render: (_, ctx) => inline(ctx.locale.today()) },
+    today: { args: 0, render: (_, ctx) => inline(ctx.locale.today(ctx.wareki)) },
     and: symbol('<span class="and"></span>'),
     thanks: (n, ctx) => inline(`<span class="footnote">${renderInline(n.args[0], ctx)}</span>`),
 
@@ -218,9 +218,6 @@ export const base: Package = {
     item: { args: 0, render: ignore },
     onecolumn: { args: 0, render: ignore },
     twocolumn: { args: 0, render: ignore },
-    // jsclasses の \today の表記切替。プレビューは常に西暦
-    西暦: ignore,
-    和暦: ignore,
     tableofcontents: { args: 0 },
   },
   environments: {

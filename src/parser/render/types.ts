@@ -50,6 +50,8 @@ export interface Ctx {
   /** 描画中の float 環境（\caption の番号付けに使う） */
   float?: 'figure' | 'table';
   bib: BibState;
+  /** \和暦 で切り替わる 	oday の表記（jsclasses） */
+  wareki: boolean;
 }
 
 /** ブロック要素かどうかを付けたレンダリング結果 */

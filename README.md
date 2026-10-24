@@ -5,6 +5,7 @@ A lightweight LaTeX preview for VS Code.<br />
 Unlike other LaTeX extensions, it also works in VS Code for the Web (vscode.dev / github.dev). No TeX installation is required.
 
 - https://marketplace.visualstudio.com/items?itemName=kmmz1127.simple-latex-preview
+- https://open-vsx.org/extension/kmmz1127/simple-latex-preview
 
 ![Screenshot](images/screenshot.png)
 
@@ -13,7 +14,7 @@ Unlike other LaTeX extensions, it also works in VS Code for the Web (vscode.dev 
 2. Click the preview icon at the top right of the editor, or run `LaTeX Preview: Open Preview to the Side` from the Command Palette
 3. The preview updates as you type
 
-Use the buttons at the top right of the preview to zoom out / in (`−` / `+`), show at actual size (`100%`), or fit to the window (Fit). Scroll sync with the editor can be turned off with the `latexPreview.scrollSync` setting.
+Use the buttons at the top right of the preview to zoom out / in (`−` / `+`), show at actual size (`100%`), or fit to the window (Fit).
 Double-click on the preview to jump to that line in the editor.
 
 The preview follows the active `.tex` editor. Click the lock icon at the top right of the preview tab to keep it on the current file; opening the preview again then creates a new preview, so you can view several files side by side.
@@ -35,6 +36,7 @@ The preview follows the active `.tex` editor. Click the lock icon at the top rig
 - Font size, line spacing and indentation based on the document class (`jsarticle` / `article` families)
 - Two-column layout with `twocolumn`, and page breaks based on `\textheight`
 - `\setlength` in the preamble (`\textwidth` `\textheight` `\columnsep` `\parindent`)
+- Japanese: `\ruby` (per-character ruby with `|`), emphasis dots `\kenten` `\bou`, `\textgt` `\textmc`, `\和暦` / `\西暦` for `\today`, and `\UTF` from the otf package
 
 Unsupported commands do not cause errors; they are shown as dimmed source text.
 
@@ -58,7 +60,7 @@ You can also open them from Open Settings in the preview's "…" menu.
 ## Bug reports and feature requests
 - https://github.com/kmmz532/vscode-latex-preview/issues
 
-For developers, see [docs/README.en.md](docs/README.en.md) (English) or [docs/README.md](docs/README.md) (Japanese).
+For developers, see [docs/README.en.md](docs/README.en.md).
 
 ## License
 - MIT

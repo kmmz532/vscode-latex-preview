@@ -56,6 +56,8 @@ export function renderAnalysis(analysis: Analysis, opts: RenderOptions): RenderR
     counters: new Counters(registry().counters),
     labels: new Labels(),
     bib,
+    // プリアンブルは描画しないので、そこでの \和暦 / \西暦 はここで拾う
+    wareki: doc ? preambleWareki(nodes) : false,
   };
   // \ref は目印で出しておき、すべての \label が揃ってから番号に置き換える
   const inner = ctx.labels.resolve(renderColumns(body, layout.twoColumn, ctx));
@@ -67,6 +69,19 @@ export function renderAnalysis(analysis: Analysis, opts: RenderOptions): RenderR
     opts.paginate !== false && nodes.some((n) => n.kind === 'command' && n.name === 'documentclass') ? ' paged' : '';
   const html = `<div class="doc ${layout.japanese ? 'ja' : 'en'}${paged}" style="${style}">${inner}</div>`;
   return { html, macros };
+}
+
+function preambleWareki(nodes: Node[]): boolean {
+  let wareki = false;
+  for (const n of nodes) {
+    if (n.kind === 'env' && n.name === 'document') {
+      break;
+    }
+    if (n.kind === 'command' && (n.name === '和暦' || n.name === '西暦')) {
+      wareki = n.name === '和暦';
+    }
+  }
+  return wareki;
 }
 
 function collectMeta(nodes: Node[], meta: Meta) {

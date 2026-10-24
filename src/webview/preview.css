@@ -167,6 +167,9 @@ h4, h5, h6 { font-size: 1em; }
 .abstract-title { font-weight: bold; text-align: center; }
 .sc { font-variant: small-caps; }
 .sf { font-family: KaTeX_SansSerif, var(--gothic); }
+.gt { font-family: KaTeX_SansSerif, var(--gothic); }
+.mc { font-family: KaTeX_Main, var(--mincho); }
+.kenten { text-emphasis: filled sesame; -webkit-text-emphasis: filled sesame; }
 
 li.custom { list-style: none; }
 .item-label { font-weight: bold; }

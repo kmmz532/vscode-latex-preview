@@ -7,7 +7,8 @@ export interface Locale {
   listingName: string;
   /** キャプションの頭（「図1　」/「Figure 1: 」） */
   captionLabel(name: string, num: string): string;
-  today(): string;
+  /** wareki は jsclasses の \和暦 が有効か（日本語以外では無視） */
+  today(wareki?: boolean): string;
 }
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -20,10 +21,12 @@ const japanese: Locale = {
   refName: '参考文献',
   listingName: 'Listing',
   captionLabel: (name, num) => `${name}${num}　`,
-  // jsclasses の既定は西暦
-  today: () => {
+  // jsclasses の既定は西暦。\和暦 では令和で表す（令和元年は「元年」と書く）
+  today: (wareki) => {
     const d = new Date();
-    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+    const y = d.getFullYear();
+    const year = wareki && y >= 2019 ? `令和${y === 2019 ? '元' : y - 2018}` : String(y);
+    return `${year}年${d.getMonth() + 1}月${d.getDate()}日`;
   },
 };
 

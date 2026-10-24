@@ -2,6 +2,7 @@ import { Node, parse, Syntax } from '../parser';
 import { base } from './packages/base';
 import { bibliography } from './packages/bibliography';
 import { graphicx } from './packages/graphicx';
+import { japanese } from './packages/japanese';
 import { math } from './packages/math';
 import { tabular } from './packages/tabular';
 import { verbatim } from './packages/verbatim';
@@ -9,7 +10,7 @@ import type { CounterDef } from './numbering';
 import type { CommandDef, EnvDef, Package } from './types';
 
 /** 有効なパッケージ。新しい機能はパッケージを作ってここに足す */
-const packages = (): Package[] => [base, math, verbatim, tabular, graphicx, bibliography];
+const packages = (): Package[] => [base, math, verbatim, tabular, graphicx, bibliography, japanese];
 
 interface Registry {
   commands: Map<string, CommandDef>;

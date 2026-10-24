@@ -5,6 +5,7 @@ LaTeXを簡易プレビューするVSCode拡張機能<br />
 既存のLaTeX拡張機能とは異なり、Web版（vscode.dev / github.dev）でも動作する
 
 - https://marketplace.visualstudio.com/items?itemName=kmmz1127.simple-latex-preview
+- https://open-vsx.org/extension/kmmz1127/simple-latex-preview
 
 ![スクリーンショット](images/screenshot.png)
 
@@ -13,7 +14,7 @@ LaTeXを簡易プレビューするVSCode拡張機能<br />
 2. エディタ右上のプレビューアイコン、またはコマンドパレットから `LaTeX Preview: Open Preview to the Side` を実行
 3. 編集内容はリアルタイムに反映される
 
-プレビュー右上のボタンで拡大/縮小（`−` / `+`）、等倍（`100%`）、窓幅に合わせる（Fit）を切り替えられる。エディタとのスクロール同期は設定 `latexPreview.scrollSync` でオフにできる。
+プレビュー右上のボタンで拡大/縮小（`−` / `+`）、等倍（`100%`）、窓幅に合わせる（Fit）を切り替えられる。
 プレビューをダブルクリックすると、エディタのその行へ移動する。
 
 プレビューは選択中のタブの `.tex` に追従して切り替わる。プレビューのタブ右上の鍵のアイコンで今のファイルに固定でき、その状態でもう一度プレビューを開くと新しいプレビューができるので、複数のファイルを並べて表示できる。
@@ -35,6 +36,7 @@ LaTeXを簡易プレビューするVSCode拡張機能<br />
 - 文書クラス（`jsarticle` / `article` 系）に合わせた文字サイズ・行送り・字下げ
 - `twocolumn` による 2 段組と、`\textheight` に基づくページ分割
 - プリアンブルの `\setlength`（`\textwidth` `\textheight` `\columnsep` `\parindent`）
+- 日本語: `\ruby`（`|` 区切りのモノルビ）、圏点 `\kenten` `\bou`、`\textgt` `\textmc`、`\和暦` / `\西暦` による `\today` の切替、otf の `\UTF`
 
 未対応のコマンドはエラーにせず、薄い色でそのまま表示する。
 
@@ -58,7 +60,7 @@ LaTeXを簡易プレビューするVSCode拡張機能<br />
 ## バグ報告、要望
 - https://github.com/kmmz532/vscode-latex-preview/issues
 
-開発者向けの情報は [docs/README.md](docs/README.md) を参照。
+開発者向けドキュメントは [docs/README.md](docs/README.md) を参照。
 
 ## License
 - MIT
