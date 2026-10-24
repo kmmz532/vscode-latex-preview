@@ -2,7 +2,7 @@
   "name": "simple-latex-preview",
   "displayName": "Simple LaTeX Preview",
   "description": "%extension.description%",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "license": "MIT",
   "icon": "images/icon.png",
   "repository": {
