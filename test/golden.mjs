@@ -36,6 +36,14 @@ for (const f of readdirSync(dir).filter((f) => f.endsWith('.tex'))) {
     const { html, macros } = renderDocument(src, { showUnknownCommands, bibFiles, inputs, images: { img: 'data:image/png;base64,AA==' } });
     // 比較しやすいようタグごとに改行
     const actual = html.replace(/></g, '>\n<') + '\n\n' + JSON.stringify(macros, null, 2) + '\n';
+    // 改行コードが CRLF / CR でも結果が変わらないこと
+    for (const eol of ['\r\n', '\r']) {
+      const other = renderDocument(src.replace(/\r?\n/g, eol), { showUnknownCommands, bibFiles, inputs, images: { img: 'data:image/png;base64,AA==' } });
+      if (other.html !== html) {
+        failed++;
+        console.error(`FAIL ${f} (eol ${JSON.stringify(eol)})`);
+      }
+    }
     const file = join(dir, f.replace(/\.tex$/, showUnknownCommands ? '.html' : '.hidden.html'));
     if (update || !existsSync(file)) {
       writeFileSync(file, actual);

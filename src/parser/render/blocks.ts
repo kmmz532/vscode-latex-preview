@@ -1,7 +1,9 @@
 import type { Node } from '../parser';
 import { renderMath } from './packages/math';
+import { renderTheorem } from './packages/theorem';
 import { renderVerb } from './packages/verbatim';
 import { parseFragment, registry } from './registry';
+import { alignOf, switchOpen } from './switches';
 import { escapeHtml, renderText } from './text';
 import { block, CommandNode, Ctx, EnvNode, inline, NOTHING, Out } from './types';
 
@@ -41,9 +43,24 @@ export function renderBlocks(nodes: Node[], ctx: Ctx): string {
   let para = '';
   let paraLine = -1;
   let noindent = false;
+  /** \large などで開いたままの <span>（段落をまたいで効く） */
+  const opens: string[] = [];
+  /** \centering などで決まる段落の配置 */
+  let align = '';
+  const add = (h: string) => {
+    if (!para && !h.trim()) {
+      return;
+    }
+    if (!para) {
+      para = opens.join('');
+    }
+    para += h;
+  };
   const flush = () => {
     if (para.trim()) {
-      html += `<p${noindent ? ' class="noindent"' : ''} data-line="${paraLine}">${para.trim()}</p>\n`;
+      const cls = noindent || align ? ' class="noindent"' : '';
+      const style = align ? ` style="text-align:${align}"` : '';
+      html += `<p${cls}${style} data-line="${paraLine}">${para.trim()}${'</span>'.repeat(opens.length)}</p>\n`;
     }
     para = '';
     paraLine = -1;
@@ -54,9 +71,24 @@ export function renderBlocks(nodes: Node[], ctx: Ctx): string {
       flush();
       continue;
     }
-    if (n.kind === 'command' && n.name === 'noindent' && !para.trim()) {
-      noindent = true;
-      continue;
+    if (n.kind === 'command') {
+      if (n.name === 'noindent' && !para.trim()) {
+        noindent = true;
+        continue;
+      }
+      const al = alignOf(n.name);
+      if (al) {
+        align = al;
+        continue;
+      }
+      const open = switchOpen(n);
+      if (open) {
+        opens.push(open);
+        if (para) {
+          para += open;
+        }
+        continue;
+      }
     }
     const out = renderNode(n, ctx);
     if (out.block) {
@@ -66,7 +98,7 @@ export function renderBlocks(nodes: Node[], ctx: Ctx): string {
       if (paraLine < 0 && out.html.trim()) {
         paraLine = n.line;
       }
-      para += out.html;
+      add(out.html);
     }
   }
   flush();
@@ -77,7 +109,17 @@ export function renderInline(nodes: Node[] | undefined, ctx: Ctx): string {
   if (!nodes) {
     return '';
   }
-  return nodes.map((n) => (n.kind === 'parbreak' ? '<br>' : renderNode(n, ctx).html)).join('');
+  let html = '';
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    const open = n.kind === 'command' ? switchOpen(n) : undefined;
+    if (open) {
+      // 宣言型コマンドは、このグループの残りをまとめて囲む
+      return html + open + renderInline(nodes.slice(i + 1), ctx) + '</span>';
+    }
+    html += n.kind === 'parbreak' ? '<br>' : renderNode(n, ctx).html;
+  }
+  return html;
 }
 
 function renderNode(n: Node, ctx: Ctx): Out {
@@ -98,7 +140,11 @@ function renderNode(n: Node, ctx: Ctx): Out {
     }
     case 'env': {
       const h = registry().environments.get(n.name)?.render;
-      return h ? h(n, ctx) : renderUnknownEnv(n, ctx);
+      if (h) {
+        return h(n, ctx);
+      }
+      const theorem = ctx.theorems.get(n.name);
+      return theorem ? renderTheorem(n, theorem, ctx) : renderUnknownEnv(n, ctx);
     }
   }
 }

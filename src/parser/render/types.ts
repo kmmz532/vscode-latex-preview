@@ -41,6 +41,26 @@ export interface Meta {
   date?: Node[];
 }
 
+/** 
+ewtheorem で定義した定理環境 */
+export interface Theorem {
+  /** 見出しの語（Theorem / 定理 など。描画済みの HTML） */
+  title: string;
+  /** 番号に使うカウンタ。番号なし（
+ewtheorem*）なら undefined */
+  counter?: string;
+  /** 	heoremstyle（plain / definition / remark） */
+  style: string;
+}
+
+/** 目次の 1 項目 */
+export interface TocEntry {
+  level: number;
+  num: string;
+  /** 見出しの HTML */
+  html: string;
+}
+
 export interface Ctx {
   opts: RenderOptions;
   meta: Meta;
@@ -52,6 +72,11 @@ export interface Ctx {
   bib: BibState;
   /** \和暦 で切り替わる 	oday の表記（jsclasses） */
   wareki: boolean;
+  theorems: Map<string, Theorem>;
+  /** 現在の 	heoremstyle */
+  theoremStyle: string;
+  /** 	ableofcontents に出す見出し（描画した順） */
+  toc: TocEntry[];
 }
 
 /** ブロック要素かどうかを付けたレンダリング結果 */

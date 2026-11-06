@@ -18,6 +18,17 @@ export interface RawEnvironments {
 /** ひらがな・カタカナ・漢字 */
 const CJK = /[぀-ヿ㐀-䶿一-鿿豈-﫿]/;
 
+/** アクセントを付ける記号コマンドと、対応する結合文字 */
+const ACCENTS: Record<string, string> = {
+  "'": '́',
+  '`': '̀',
+  '^': '̂',
+  '"': '̈',
+  '~': '̃',
+  '=': '̄',
+  '.': '̇',
+};
+
 export function tokenize(src: string, raw: RawEnvironments): Token[] {
   // CRLF の文書でも空行（段落区切り）や行番号が同じように扱われるよう、改行を LF にそろえる
   src = src.replace(/\r\n?/g, '\n');
@@ -146,6 +157,17 @@ export function tokenize(src: string, raw: RawEnvironments): Token[] {
         pushText('\\');
         i++;
         continue;
+      }
+      // アクセント記号（\'e → é、\"{o} → ö、\^\i → î）は結合文字で 1 文字にする
+      const accent = ACCENTS[next];
+      if (accent) {
+        const am = /^(?:\{\s*(\\[ij](?![a-zA-Z])|[a-zA-Z])\s*\}|(\\[ij](?![a-zA-Z])|[a-zA-Z]))/.exec(src.slice(i + 2, i + 16));
+        if (am) {
+          const base = (am[1] ?? am[2]).replace(/^\\/, '');
+          pushText((base + accent).normalize('NFC'));
+          advance(i + 2 + am[0].length);
+          continue;
+        }
       }
       flushText();
       let name: string;

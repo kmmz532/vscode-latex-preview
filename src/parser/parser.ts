@@ -214,6 +214,18 @@ class Parser {
   }
 
   private parseCommand(name: string, line: number): Node {
+    // \newtheorem{名前}[共有するカウンタ]{見出し}[親カウンタ]：オプションが引数の間に入る
+    if (name === 'newtheorem' || name === 'newtheorem*') {
+      const first = this.readArg();
+      const shared = this.readOpt();
+      const title = this.readArg();
+      const within = this.readOpt();
+      const args = [first ?? [], title ?? []];
+      if (within) {
+        args.push([{ kind: 'text', value: within, line }]);
+      }
+      return { kind: 'command', name, opt: shared, args, line };
+    }
     const opt = this.readOpt();
     const args: Node[][] = [];
     const arity = this.syntax.commandArgs(name);

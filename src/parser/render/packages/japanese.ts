@@ -1,8 +1,11 @@
 import { renderInline } from '../blocks';
 import { escapeHtml, plain } from '../text';
-import { CommandHandler, ignore, inline, NOTHING, Package } from '../types';
+import { CommandDef, CommandHandler, ignore, inline, NOTHING, Package } from '../types';
 
-const wrap = (cls: string): CommandHandler => (n, ctx) => inline(`<span class="${cls}">${renderInline(n.args[0], ctx)}</span>`);
+const wrap = (cls: string): CommandDef => ({
+  args: 1,
+  render: (n, ctx) => inline(`<span class="${cls}">${renderInline(n.args[0], ctx)}</span>`),
+});
 
 /**
  * ルビ（pxrubrica / okumacro の \ruby{親文字}{ルビ}）。

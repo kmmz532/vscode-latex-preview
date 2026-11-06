@@ -3,6 +3,8 @@ export interface Locale {
   figureName: string;
   tableName: string;
   abstractName: string;
+  contentsName: string;
+  proofName: string;
   refName: string;
   listingName: string;
   /** キャプションの頭（「図1　」/「Figure 1: 」） */
@@ -18,6 +20,8 @@ const japanese: Locale = {
   figureName: '図',
   tableName: '表',
   abstractName: '概要',
+  contentsName: '目次',
+  proofName: '証明',
   refName: '参考文献',
   listingName: 'Listing',
   captionLabel: (name, num) => `${name}${num}　`,
@@ -35,6 +39,8 @@ const english: Locale = {
   figureName: 'Figure',
   tableName: 'Table',
   abstractName: 'Abstract',
+  contentsName: 'Contents',
+  proofName: 'Proof',
   refName: 'References',
   listingName: 'Listing',
   captionLabel: (name, num) => `${name} ${num}: `,

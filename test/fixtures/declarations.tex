@@ -1,0 +1,33 @@
+\documentclass{article}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\begin{document}
+\tableofcontents
+\section{First}
+{\bf bold} {\it italic \large larger} \textcolor{red}{red} \textsuperscript{sup}
+
+\large
+
+large one
+
+large two
+
+\begin{center}
+\small small in env
+\end{center}
+
+caf\'e na\"ive \^\i{} Stra\ss{}e \copyright\ \S 3
+
+\subsection{Sub}
+\begin{theorem}[Note]
+Body.
+\end{theorem}
+\begin{lemma}Body.\end{lemma}
+\begin{definition}Body.\end{definition}
+\begin{proof}Body.\end{proof}
+
+\appendix
+\section{Extra}
+\end{document}

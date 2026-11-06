@@ -234,3 +234,42 @@ dd p, li p { margin: 0.2em 0; }
 .toolbar button:hover { background: var(--vscode-toolbar-hoverBackground, #8883); }
 .toolbar button.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
 .toolbar .zoom-label { min-width: 40px; text-align: center; align-self: center; }
+
+/* 宣言型の書体・サイズ（{\bf ...} \large など） */
+.f-bf { font-weight: bold; }
+.f-it { font-style: italic; }
+.f-tt { font-family: var(--mono, monospace); }
+.f-sf { font-family: KaTeX_SansSerif, var(--gothic); }
+.f-sc { font-variant: small-caps; }
+.f-rm { font-weight: normal; font-style: normal; font-variant: normal; }
+.sz-tiny { font-size: 0.5em; }
+.sz-scriptsize { font-size: 0.7em; }
+.sz-footnotesize { font-size: 0.8em; }
+.sz-small { font-size: 0.9em; }
+.sz-normalsize { font-size: 1em; }
+.sz-large { font-size: 1.2em; }
+.sz-Large { font-size: 1.44em; }
+.sz-LARGE { font-size: 1.728em; }
+.sz-huge { font-size: 2.074em; }
+.sz-Huge { font-size: 2.488em; }
+.fbox { border: 1px solid; padding: 0.1em 0.3em; }
+.parbox { display: inline-block; vertical-align: top; }
+.minipage { text-align: left; }
+
+/* 定理・証明 */
+.theorem { margin: 1em 0; }
+.theorem p { text-indent: 0; }
+.theorem.plain { font-style: italic; }
+.theorem.plain .thm-head { font-style: normal; }
+.thm-head { font-weight: bold; }
+.theorem.remark .thm-head, .theorem.proof .thm-head { font-style: italic; font-weight: normal; }
+.thm-note { font-style: normal; }
+.qed { float: right; }
+
+/* 目次 */
+.toc { margin: 1.5em 0; }
+.toc-title { font-size: 1.4em; font-weight: bold; margin-bottom: 0.8em; }
+.toc-num { display: inline-block; min-width: 2em; }
+.toc-item.l2 { margin-top: 0.6em; font-weight: bold; }
+.toc-item.l3 { margin-left: 1.5em; }
+.toc-item.l4 { margin-left: 3.8em; }

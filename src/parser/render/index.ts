@@ -4,6 +4,7 @@ import { prepareBib } from './packages/bibliography';
 import { renderColumns } from './blocks';
 import { localeFor } from './locale';
 import { Counters, Labels } from './numbering';
+import { renderToc, TOC_MARK } from './packages/toc';
 import { registry } from './registry';
 import { collectResources, DocumentResources } from './resources';
 import { escapeHtml, plain } from './text';
@@ -12,6 +13,9 @@ import type { Ctx, Meta, RenderOptions, RenderResult } from './types';
 export type { RenderOptions, RenderResult } from './types';
 export type { DocumentResources } from './resources';
 export { escapeHtml } from './text';
+
+/** プリアンブルにあっても効かせるコマンド */
+const PREAMBLE_COMMANDS = new Set(['newtheorem', 'newtheorem*', 'theoremstyle']);
 
 /** 解析の結果。描画の前に参照ファイルを読み込めるよう、構文木と参照を分けて返す */
 export type Analysis =
@@ -58,9 +62,25 @@ export function renderAnalysis(analysis: Analysis, opts: RenderOptions): RenderR
     bib,
     // プリアンブルは描画しないので、そこでの \和暦 / \西暦 はここで拾う
     wareki: doc ? preambleWareki(nodes) : false,
+    theorems: new Map(),
+    theoremStyle: 'plain',
+    toc: [],
   };
   // \ref は目印で出しておき、すべての \label が揃ってから番号に置き換える
-  const inner = ctx.labels.resolve(renderColumns(body, layout.twoColumn, ctx));
+  // プリアンブルは描画しないので、そこでの定理環境の定義はここで反映する
+  if (doc) {
+    for (const n of nodes) {
+      if (n === doc) {
+        break;
+      }
+      if (n.kind === 'command' && PREAMBLE_COMMANDS.has(n.name)) {
+        registry().commands.get(n.name)?.render?.(n, ctx);
+      }
+    }
+  }
+  const rendered = renderColumns(body, layout.twoColumn, ctx);
+  // 目次は見出しをすべて描き終えてから埋める
+  const inner = ctx.labels.resolve(rendered.split(TOC_MARK).join(renderToc(ctx)));
   const style =
     `--fs:${layout.fontSize};--lh:${layout.lineHeight};--indent:${layout.parindent};` +
     `--textwidth:${layout.textwidth};--textheight:${layout.textheight};--colsep:${layout.columnsep}`;

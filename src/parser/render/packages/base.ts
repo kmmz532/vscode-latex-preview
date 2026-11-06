@@ -1,22 +1,44 @@
 import type { Node } from '../../parser';
 import { renderBlocks, renderInline } from '../blocks';
 import { refStepCounter } from '../numbering';
+import { cssColor, SWITCH_NAMES } from '../switches';
 import { escapeHtml, plain, renderText } from '../text';
-import { block, CommandHandler, Ctx, EnvHandler, ignore, inline, NOTHING, Package } from '../types';
+import { TOC_MARK } from './toc';
+import { block, CommandDef, CommandHandler, Ctx, EnvHandler, ignore, inline, NOTHING, Package } from '../types';
 
-const wrap = (tag: string, cls?: string): CommandHandler => (n, ctx) =>
-  inline(`<${tag}${cls ? ` class="${cls}"` : ''}>${renderInline(n.args[0], ctx)}</${tag}>`);
+const one = (render: CommandHandler): CommandDef => ({ args: 1, render });
+
+const wrap = (tag: string, cls?: string): CommandDef =>
+  one((n, ctx) => inline(`<${tag}${cls ? ` class="${cls}"` : ''}>${renderInline(n.args[0], ctx)}</${tag}>`));
 
 /**
  * 見出し。counter は採番に使うカウンタ。
  * article 系の既定（secnumdepth=3）に合わせ、subsubsection より下と * 付きは番号なし
  */
-const heading = (level: number, counter?: string): CommandHandler => (n, ctx) => {
+const heading = (level: number, counter?: string): CommandDef => one((n, ctx) => {
   let num = '';
+  let numbered = '';
   if (counter && !n.name.endsWith('*')) {
-    num = `<span class="secnum">${refStepCounter(ctx, counter)}</span>`;
+    numbered = refStepCounter(ctx, counter);
+    num = `<span class="secnum">${numbered}</span>`;
   }
-  return block(`<h${level} data-line="${n.line}">${num}${renderInline(n.args[0], ctx) || '&nbsp;'}</h${level}>`);
+  const title = renderInline(n.args[0], ctx);
+  if (numbered) {
+    ctx.toc.push({ level, num: numbered, html: title });
+  }
+  return block(`<h${level} data-line="${n.line}">${num}${title || '&nbsp;'}</h${level}>`);
+});
+
+/** 文字を出すだけのコマンド（\ss{} のように後ろに {} を付けて空白を区切る書き方にも対応） */
+const SYMBOLS: Record<string, string> = {
+  ss: 'ß', SS: 'SS', o: 'ø', O: 'Ø', ae: 'æ', AE: 'Æ', oe: 'œ', OE: 'Œ', aa: 'å', AA: 'Å', l: 'ł', L: 'Ł',
+  i: 'ı', j: 'ȷ', copyright: '©', S: '§', P: '¶', pounds: '£', dag: '†', ddag: '‡',
+  textregistered: '®', texttrademark: '™', textasciitilde: '~', textasciicircum: '^', textbar: '|',
+  textless: '&lt;', textgreater: '&gt;', textunderscore: '_', textemdash: '—', textendash: '–',
+  textquoteleft: '‘', textquoteright: '’', textquotedblleft: '“', textquotedblright: '”',
+  textdegree: '°', textellipsis: '…', textbullet: '•', textperiodcentered: '·', euro: '€', texteuro: '€',
+  guillemotleft: '«', guillemotright: '»', flqq: '«', frqq: '»', textdagger: '†', textdaggerdbl: '‡',
+  textparagraph: '¶', textsection: '§', textcopyright: '©', textpm: '±', texttimes: '×', textdiv: '÷',
 };
 
 const symbol = (s: string): CommandHandler => () => inline(s);
@@ -105,6 +127,29 @@ export const base: Package = {
     subparagraph: heading(6),
     'subparagraph*': heading(6),
 
+    ...Object.fromEntries(SWITCH_NAMES.map((name) => [name, { args: 0, render: ignore } as CommandDef])),
+    color: { args: 1, render: ignore },
+    raggedright: { args: 0, render: ignore },
+    raggedleft: { args: 0, render: ignore },
+    textcolor: {
+      args: 2,
+      render: (n, ctx) => {
+        const c = cssColor(n.opt, plain(n.args[0]));
+        return inline(`<span${c ? ` style="color:${c}"` : ''}>${renderInline(n.args[1], ctx)}</span>`);
+      },
+    },
+    colorbox: {
+      args: 2,
+      render: (n, ctx) => {
+        const c = cssColor(n.opt, plain(n.args[0]));
+        return inline(`<span${c ? ` style="background:${c}"` : ''}>${renderInline(n.args[1], ctx)}</span>`);
+      },
+    },
+    textsuperscript: wrap('sup'),
+    textsubscript: wrap('sub'),
+    fbox: wrap('span', 'fbox'),
+    framebox: wrap('span', 'fbox'),
+    parbox: { args: 2, render: (n, ctx) => inline(`<span class="parbox">${renderInline(n.args[1], ctx)}</span>`) },
     textbf: wrap('strong'),
     textit: wrap('em'),
     textsl: wrap('em'),
@@ -118,40 +163,39 @@ export const base: Package = {
     textmd: wrap('span'),
     textnormal: wrap('span'),
     mbox: wrap('span'),
-    footnote: (n, ctx) => inline(`<span class="footnote">${renderInline(n.args[0], ctx)}</span>`),
-    url: (n) => inline(`<code class="url">${escapeHtml(plain(n.args[0]))}</code>`),
+    footnote: one((n, ctx) => inline(`<span class="footnote">${renderInline(n.args[0], ctx)}</span>`)),
+    url: one((n) => inline(`<code class="url">${escapeHtml(plain(n.args[0]))}</code>`)),
     href: { args: 2, render: (n, ctx) => inline(`<span class="link">${renderInline(n.args[1], ctx)}</span>`) },
 
     // 読み込めたファイルはパーサが中身に置き換えるので、ここに来るのは見つからなかったもの
     input: { args: 1, render: missingInput },
     include: { args: 1, render: missingInput },
-    includeonly: ignore,
+    includeonly: one(ignore),
 
     maketitle: { args: 0, render: maketitle },
-    title: ignore,
-    author: ignore,
-    date: ignore,
+    title: one(ignore),
+    author: one(ignore),
+    date: one(ignore),
     today: { args: 0, render: (_, ctx) => inline(ctx.locale.today(ctx.wareki)) },
     and: symbol('<span class="and"></span>'),
-    thanks: (n, ctx) => inline(`<span class="footnote">${renderInline(n.args[0], ctx)}</span>`),
-
+    thanks: one((n, ctx) => inline(`<span class="footnote">${renderInline(n.args[0], ctx)}</span>`)),
     // 未定義のラベルは LaTeX と同じく ??
-    ref: (n, ctx) => inline(`<span class="ref">${ctx.labels.ref(plain(n.args[0]).trim())}</span>`),
-    eqref: (n, ctx) => inline(`<span class="ref">(${ctx.labels.ref(plain(n.args[0]).trim())})</span>`),
+    ref: one((n, ctx) => inline(`<span class="ref">${ctx.labels.ref(plain(n.args[0]).trim())}</span>`)),
+    eqref: one((n, ctx) => inline(`<span class="ref">(${ctx.labels.ref(plain(n.args[0]).trim())})</span>`)),
     pageref: () => inline('<span class="ref">??</span>'),
-    label: (n, ctx) => {
+    label: one((n, ctx) => {
       ctx.labels.define(plain(n.args[0]).trim());
       return NOTHING;
-    },
+    }),
 
-    caption: (n, ctx) => {
+    caption: one((n, ctx) => {
       if (!ctx.float) {
         return inline(renderInline(n.args[0], ctx));
       }
       const num = refStepCounter(ctx, ctx.float);
       const name = ctx.float === 'figure' ? ctx.locale.figureName : ctx.locale.tableName;
       return block(`<div class="caption" data-line="${n.line}">${ctx.locale.captionLabel(name, num)}${renderInline(n.args[0], ctx)}</div>`);
-    },
+    }),
 
     LaTeX: { args: 0, render: symbol('L<sup>A</sup>T<sub>E</sub>X') },
     TeX: { args: 0, render: symbol('T<sub>E</sub>X') },
@@ -179,6 +223,9 @@ export const base: Package = {
     ldots: symbol('…'),
     dots: symbol('…'),
     textbackslash: symbol('\\'),
+    ...Object.fromEntries(
+      Object.entries(SYMBOLS).map(([name, s]) => [name, { args: 0, render: symbol(s) } as CommandDef])
+    ),
 
     // レイアウト・プリアンブル系は無視
     documentclass: ignore,
@@ -202,7 +249,7 @@ export const base: Package = {
         return NOTHING;
       },
     },
-    hyphenation: ignore,
+    hyphenation: one(ignore),
     centering: { args: 0, render: ignore },
     noindent: { args: 0, render: ignore },
     indent: ignore,
@@ -218,7 +265,15 @@ export const base: Package = {
     item: { args: 0, render: ignore },
     onecolumn: { args: 0, render: ignore },
     twocolumn: { args: 0, render: ignore },
-    tableofcontents: { args: 0 },
+    tableofcontents: { args: 0, render: () => block(TOC_MARK) },
+    appendix: {
+      args: 0,
+      render: (_, ctx) => {
+        ctx.counters.reset('section');
+        ctx.counters.useAlpha('section');
+        return NOTHING;
+      },
+    },
   },
   environments: {
     figure: float('figure'),
@@ -241,6 +296,6 @@ export const base: Package = {
     quotation: container('quote'),
     abstract: (n, ctx) =>
       block(`<div class="abstract" data-line="${n.line}"><div class="abstract-title">${ctx.locale.abstractName}</div>${renderBlocks(n.children, ctx)}</div>`),
-    minipage: { args: 1 },
+    minipage: { args: 1, render: container('minipage') },
   },
 };

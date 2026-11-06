@@ -10,8 +10,29 @@ export interface CounterDef {
 /** LaTeX のカウンタ（\newcounter / \stepcounter / \setcounter / \thename） */
 export class Counters {
   private readonly values = new Map<string, number>();
+  private readonly defs: Map<string, CounterDef>;
+  /** A, B, ... で表すカウンタ（ppendix 後の section など） */
+  private readonly alpha = new Set<string>();
 
-  constructor(private readonly defs: ReadonlyMap<string, CounterDef>) {}
+  constructor(defs: ReadonlyMap<string, CounterDef>) {
+    this.defs = new Map(defs);
+  }
+
+  /** 文書中で定義されたカウンタ（
+ewtheorem など）を追加する */
+  define(name: string, def: CounterDef) {
+    this.defs.set(name, def);
+  }
+
+  /** 0 に戻し、従属するカウンタも戻す */
+  reset(name: string) {
+    this.set(name, 0);
+    this.resetChildren(name);
+  }
+
+  useAlpha(name: string) {
+    this.alpha.add(name);
+  }
 
   get(name: string): number {
     return this.values.get(name) ?? 0;
@@ -30,7 +51,8 @@ export class Counters {
   /** \thename：親をたどって 1.2.3 の形にする */
   format(name: string): string {
     const parent = this.defs.get(name)?.within;
-    const own = String(this.get(name));
+    const n = this.get(name);
+    const own = this.alpha.has(name) && n >= 1 && n <= 26 ? String.fromCharCode(64 + n) : String(n);
     return parent ? `${this.format(parent)}.${own}` : own;
   }
 
