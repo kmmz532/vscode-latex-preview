@@ -22,6 +22,10 @@ The preview follows the active `.tex` editor. Click the lock icon at the top rig
 ## Supported syntax
 - Math: `$...$` `\(...\)` `$$...$$` `\[...\]`, `equation` `align` `gather` `multline` (rendered with KaTeX)
 - Headings: `\section` to `\subsubsection` (numbered), `\paragraph`
+- Text styles: `\textbf` `\textit` `\emph` `\texttt` `\textcolor` etc., declarations such as `{\bf ...}` `\large` `\color`, and `\centering`
+- Special characters: accents (`\'e` `\"o` `\^\i`), `\ss` `\o` `\copyright` `\S` etc.
+- Theorems: `\newtheorem` (shared / parent counters, `*`), `\theoremstyle`, `proof`
+- Table of contents: `\tableofcontents` (no page numbers), `\appendix`
 - `\title` `\author` `\date` `\maketitle`
 - Text styles: `\textbf` `\textit` `\emph` `\texttt` `\underline`, etc.
 - Lists: `itemize` `enumerate` `description`

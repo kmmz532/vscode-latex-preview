@@ -23,7 +23,10 @@ LaTeXを簡易プレビューするVSCode拡張機能<br />
 - 数式: `$...$` `\(...\)` `$$...$$` `\[...\]`、`equation` `align` `gather` `multline`（KaTeX で描画）
 - 見出し: `\section` 〜 `\subsubsection`（自動採番）、`\paragraph`
 - `\title` `\author` `\date` `\maketitle`
-- 文字装飾: `\textbf` `\textit` `\emph` `\texttt` `\underline` など
+- 文字装飾: `\textbf` `\textit` `\emph` `\texttt` `\underline` `\textcolor` など。`{\bf ...}` `\large` のような宣言型の書体・サイズ、`\color`、`\centering` にも対応
+- 特殊文字: アクセント（`\'e` `\"o` `\^\i` など）、`\ss` `\o` `\copyright` `\S` など
+- 定理: `\newtheorem`（共有カウンタ・親カウンタ・`*` に対応）、`\theoremstyle`、`proof`
+- 目次: `\tableofcontents`（ページ番号は載らない）、`\appendix`
 - リスト: `itemize` `enumerate` `description`
 - `figure` / `table` と `\caption`
 - 画像: `\includegraphics` でワークスペース内の PNG / JPEG / SVG / GIF / WebP を表示（`width` `height` `scale` `angle`、`\graphicspath` に対応）。EPS / PDF はファイル名の枠で表示

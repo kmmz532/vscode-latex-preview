@@ -40,6 +40,7 @@ src/
 │       ├── registry.ts   # パッケージを 1 つのコマンド・環境の表にまとめる
 │       ├── resources.ts  # AST から外部ファイルへの参照を集める
 │       ├── numbering.ts  # カウンタと \label / \ref
+│       ├── switches.ts   # {\bf ...} \large \centering など、以降に効く宣言型コマンド
 │       ├── locale.ts     # 文書クラスで変わる文言（Abstract / 概要 など）
 │       ├── text.ts       # テキストのエスケープなど
 │       ├── types.ts      # 共通の型（Package, Ctx, RenderOptions など）
@@ -49,6 +50,8 @@ src/
 │           ├── verbatim.ts      # verbatim / lstlisting / minted
 │           ├── tabular.ts       # tabular, tabularx
 │           ├── graphicx.ts      # \includegraphics
+│           ├── theorem.ts       # \newtheorem, \theoremstyle, proof
+│           ├── toc.ts           # \tableofcontents（見出しを描き終えてから目次に置き換える）
 │           └── bibliography.ts  # \cite, \bibliography, thebibliography
 └── webview/
     ├── preview.ts        # Webview 側（KaTeX 描画、ページ分割、ズーム、スクロール同期）
@@ -92,7 +95,9 @@ VS Code の Markdown プレビューと同じく 2 種類ある。アクティ�
 機能は LaTeX のパッケージのように、パッケージ（`src/parser/render/packages/*.ts`）にまとめてある。パッケージは構文（引数の数）と描画を一緒に定義し、パーサとレンダラの両方が参照する。
 
 1. いずれかのパッケージの `commands` または `environments` にハンドラを追加する（新しいパッケージを作ってもよい）
-   - `{ args: 2, render }` のように必須引数の数を決められる。`args` を省くと、後続の `{...}` をすべて引数として取る
+   - `{ args: 2, render }` のように必須引数の数を決められる。`args` を省くと、後続の `{...}` をすべて引数として取るため、引数の数が決まっているコマンドは必ず `args` を指定する（省くと `\textbf{a} {b}` の `{b}` まで引数にしてしまう）
+   - `{\bf ...}` や `\large` のように以降に効くコマンドは `switches.ts` に追加し、`args: 0` で登録する
+   - プリアンブルは描画されないため、そこで効かせたいコマンドは `render/index.ts` の `PREAMBLE_COMMANDS` に追加する
    - `mathEnvironments` は中身を数式として KaTeX に渡す環境、`verbatimEnvironments` は中身を解釈しない環境
    - `counters` で採番に使うカウンタを宣言する
 2. 新しいパッケージは `registry.ts` の `packages()` に足す。同じ名前を 2 つのパッケージで定義すると例外になる

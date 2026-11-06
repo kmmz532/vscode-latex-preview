@@ -40,6 +40,7 @@ src/
 │       ├── registry.ts   # merges all packages into one command / environment table
 │       ├── resources.ts  # collects references to external files from the AST
 │       ├── numbering.ts  # counters and \label / \ref
+│       ├── switches.ts   # declarations that affect what follows: {\bf ...} \large \centering
 │       ├── locale.ts     # strings that depend on the document class (Abstract / 概要 ...)
 │       ├── text.ts       # text escaping and helpers
 │       ├── types.ts      # shared types (Package, Ctx, RenderOptions ...)
@@ -49,6 +50,8 @@ src/
 │           ├── verbatim.ts      # verbatim / lstlisting / minted
 │           ├── tabular.ts       # tabular, tabularx
 │           ├── graphicx.ts      # \includegraphics
+│           ├── theorem.ts       # \newtheorem, \theoremstyle, proof
+│           ├── toc.ts           # \tableofcontents (filled in after all headings are rendered)
 │           └── bibliography.ts  # \cite, \bibliography, thebibliography
 └── webview/
     ├── preview.ts        # webview side (KaTeX, pagination, zoom, scroll sync)
@@ -92,7 +95,9 @@ Like VS Code's Markdown preview there are two kinds: one *dynamic* panel that fo
 Features are grouped into *packages* (`src/parser/render/packages/*.ts`) like LaTeX packages. A package declares the syntax (number of arguments) and the rendering together, so both the parser and the renderer read it.
 
 1. Add a handler to `commands` or `environments` of a package (or create a new package)
-   - `{ args: 2, render }` fixes the number of required arguments. Without `args`, all following `{...}` are taken as arguments
+   - `{ args: 2, render }` fixes the number of required arguments. Without `args`, all following `{...}` are taken as arguments, so always set `args` for commands with a fixed arity (otherwise the `{b}` in `\textbf{a} {b}` is swallowed)
+   - Declarations like `{\bf ...}` and `\large` go in `switches.ts` and are registered with `args: 0`
+   - The preamble is not rendered; commands that must take effect there are listed in `PREAMBLE_COMMANDS` in `render/index.ts`
    - `mathEnvironments` lists environments whose body goes to KaTeX as raw TeX; `verbatimEnvironments` lists environments whose body is not interpreted
    - `counters` declares counters used for numbering
 2. A new package is registered in `packages()` in `registry.ts`. Defining the same name in two packages throws
