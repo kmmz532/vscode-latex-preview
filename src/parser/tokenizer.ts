@@ -19,6 +19,8 @@ export interface RawEnvironments {
 const CJK = /[぀-ヿ㐀-䶿一-鿿豈-﫿]/;
 
 export function tokenize(src: string, raw: RawEnvironments): Token[] {
+  // CRLF の文書でも空行（段落区切り）や行番号が同じように扱われるよう、改行を LF にそろえる
+  src = src.replace(/\r\n?/g, '\n');
   const tokens: Token[] = [];
   let i = 0;
   let line = 0;
